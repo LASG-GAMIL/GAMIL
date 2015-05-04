@@ -1,0 +1,196 @@
+What are these variables?  Their I/O in cam?
+What should be done before/after the call?
+Do not delete any code part before knowing 1 and 2.
+1. What does cucall need from CAM? 
+  Read ECHAM
+  a. these via dummy
+  b. those via module
+  c. put those into these 
+2. What does CAM need from cucall? Read CAM
+CALL cucall(           &!physics.f90
+     nglpx,            &!number of longitude, for single cpu decomposition,
+                        !it is the total longitude, i.e., nglon+2 in ECHAM;
+                        !for multiprocessor, it is the number in each cpu 
+                        !or nglon, IN
+     n2lp2,            &!equal to nglpx, IN
+     nglon,            &!number of longitudes on each PE, IN
+                        !for multiprocessor, the above 3 are the same
+     nlev,             &!total vertical layers, IN
+     nlevp1,           &!nlev+1, IN
+     nlevm1,           &!nlev-1, IN
+     ilab,             &!(nglpx,nlev), initialized to 0 in cuini.f90 (klab), 
+                        !defined in cubase.f90 (klab): 
+                        !    klab(:,nlev)=1
+                        !    IF (zbuo>0.) klab(:,jk) = 1 for jk=nlevm1,2,-1
+                        !    IF (loflag(jl) & ABS(pqu(jl,jk)-zqold(jl))>0.) THEN
+                        !       klab(jl,jk) = 2
+                        !    END IF
+                        !then defined in cuasc.f90 (klab): 
+                        !    IF (! ldcum(jl) .OR. ktype(jl)==3) klab(jl,jk) = 0
+                        !cloud base flag, for large scale condensation
+                        !ilab=0 nothing; ilab=1 for subcloud levels;
+                        !ilab=2 for condensation level
+                        !INOUT
+     ntrac,            &!number of tracers, 0, since the Tiedtke scheme deals
+                        !with mass flux, vertical transport of the tracers is
+                        !done inside the scheme
+                        !IN
+     xtm1(:,:,:,jrow), &!(nlon,nlev,ntrac,nlat), tracer mixing ratio at t-dt,
+                        !IN, Kg/Kg
+     xte,              &!tendencies of tracer variables, vertical diffusion
+                        !still set to 0 since ntrac=0, no tracer, INOUT [1/s]
+                        !Used to get t+dt xt and changed in cudtdq
+     tm1(:,:,jrow),    &!temperature, t-dt, [K], IN
+                        !Used to get t+dt T
+     qm1(:,:,jrow),    &!specific humidity, t-dt, [kg/kg] IN
+                        !Used to get t+dt Q
+     um1(:,:,jrow),    &!zonal wind, t-dt, [m/s] IN, real wind,i.e., u/cos(lat)
+                        !Used to get t+dt U
+     vm1(:,:,jrow),    &!meridional wind, t-dt, [m/s] IN
+                        !Used to get t+dt V
+     xm1(:,:,jrow),    &!cloud water, t-dt, [kg/kg] IN
+                        !Used to get t+dt xm
+     te(1,1),          &!T tendencies, [K/s] INOUT
+                        !Used to get t+dt T and changed in cudtdq
+     qe(1,1),          &!q tendencies, INOUT, [1/s] 
+                        !It is used to:   1. get t+dt q in cucall
+                        !CAN'T BE ALL 0!  2. determine type of convection
+                        !                 3. be changed in cudtdq
+     vom(1,1),         &!u tendencies, INOUT, [m/s**2]
+                        !Used to get t+dt U and changed in cududv
+     vol(1,1),         &!v tendencies, INOUT, [m/s**2]
+                        !Used to get t+dt V and changed in cududv
+     xe(1,1),          &!cloud water tendencies, IN, [1/s]
+                        !Used to get t+dt xm, NOT changed
+     vervel(1,1),      &!t+dt vertical velocity, IN, [Pa/s]
+     qhfl,             &!moisture flux at the surface, IN [Kg/(m^2s)]
+                        !Got in vertical diffusion; used to determine
+                        !type of convection.  VERY IMPORTANT
+     xtec,             &!array (nglpx,nlev), INOUT
+                        !tendency of detrained convective cloud water
+                        !To be got in cudtdq and used in large scale
+                        !condensation
+     app1,             &!t+dt full-level pressures, IN [Pa], mid level in CAM
+     aphp1,            &!t+dt half-level pressures, IN [Pa], interface in CAM
+     geom1,            &!t-dt geopotential height, IN [m^2/s^2]
+                        !Not t+dt; phi+phis (surface geopotential)
+     rsfc,             &!convective rain, OUT [Kg/(m**2 s)]
+                        !Current step, changed in cudtdq
+     ssfc,             &!convective snow, OUT [Kg/(m**2 s)]
+                        !Current step, changed in cudtdq
+     aprc(:,jrow),     &!rsfc+ssfc, accum. conv. precipitation INOUT [m]
+                        !accumulated in cudtdq
+     aprs(:,jrow),     &!accum. convective snow, INOUT [m]
+                        !accumulated in cudtdq
+     itype,            &!integer array (nglpx), INOUT
+                        !convective type: 0 no convection
+                        !                 1 penetrative convection
+                        !                 2 shallow to medium convection
+                        !                 3 mid-level convection
+                        !got in cumastr, used outside cucall in cond
+                        !if not, it can be defined inside cucall
+                        !VERY IMPORTANT
+     loland,           &!land logical, IN
+                        !used in cuasc to limit the convective depth
+                        !zdnoprc, then cloud water conversion coef. to rain
+     topmax(:,jrow),   &!Maximum convective cloud tops, INOUT [m]
+                        !Nothing but a returned value as to the cucall
+     topmaxm(:,jrow),  &!99999.0, IN
+     zsrain,           &!accum. zonal total rain, INOUT   --|
+     zsevap,           &!accum. zonal total evap., INOUT    |
+     zsheat,           &!accum. zonal total heat, INOUT     |- For zonal diagn.
+     zsdiss,           &!accum. zonal total rsfc, INOUT     | 
+     zsmelt            &!accum. zonal total melt, INOUT   --|
+     )
+
+call zm_convr(         &! tphysbc
+     lchnk,            &! latitude, IN
+     ncol,             &! longitude, IN
+     state%t,          &! temperature, IN [K]
+     state%q,          &! specific humidity, IN [Kg/Kg]
+     precc,            &! (pcols), convective precipitation rate, 
+                        !          rain+snow, OUT [m/s]
+     cnt,              &! real (pcols), top level of convective activity, OUT
+                        !       1. i from 1 to ncol, if cape(i)>capelmt, 
+                        !            lengath=lengath+1; index(lengath)=i
+                        !       2. ii from 1 to lengath
+                        !            i=index(ii), ideep(ii)=i
+                        !            i.e.: index=ideep
+                        !       3. cnt(i)=pver
+                        !       4. cnt(1:lengath)=jt(1:lengath) 
+     cnb,              &! real (pcols), cloud base level, OUT
+                        ! i.e. level with largest moist static energy
+                        ! =maxi,maxg,mx, defined in buoyan
+     pblht,            &! planetary boundary layer height, IN
+     state%zm,         &! midpoint geopotential, [m], IN
+     state%phis,       &! surface geopotential, [m], IN
+     state%zi,         &! geopotential at interface, [m], IN
+     ptend%q(:,:,1),   &! q tendency, OUT, [1/s]
+     ptend%s,          &! t tendency, OUT, [cp*K/s]
+     state%pmid,       &! midpoint pressure, [Pa], IN
+     state%pint,       &! interface pressure, [Pa], IN
+     state%pdel,       &! layer thickness [Pa], IN
+     ts,               &! surface temperature, determine rain/snow, IN
+     .5*ztodt,         &! time step, IN
+     cmfmc,            &! convective mass flux, OUT = mu+md,     --------| 
+                        ! real (pcols,pverp), =mcon,mc
+                        ! defined in cldprp
+                        ! net convective mass flux, [mb/s]
+                        !   while inside, it is scaled by mb; here, mb   |
+                        !   is the cloud base mass flux
+                        ! in zm_convr, convective points are packed      !
+                        ! together for calculation; after the calculation!
+                        ! is finished, the points have been unpacked     !
+                        ! e.g., inside cmfmc(1:lengath,:)>0 while        !
+                        !       outside cmfmc(ideep(i),:)>0              !
+     cmfcme,           &! conv. mass flux condensation - evap., OUT      |
+                        ! real (pcols,pver), cmeg is the cloud water
+                        !       condensed - rain water evaporated
+                        ! cu(i,k)-evp(i,k), [mb/s]
+     nstep,            &! current time step, no use, IN
+     tpert,            &! perturbation t by pbl, IN, [K]
+     dlf,              &! dtrained cloud water tendency, OUT             |
+                        ! dl(i,k) = (1-fact)*du(i,k)*ql(i,k+1)
+                        ! fact: ifndef PCWDETRAIN, fact=1; else fact=0
+                        ! du: detrainment rate in updraft, 
+                        !     (partial Mu)/(partial z), [mb/m/s]
+                        ! ql: liquid water of updraft, [kg/kg] 
+                        !    ql1 = 1./mu(i,k)* (mu(i,k+1)*ql(i,k+1)- &
+                        !    dz(i,k)*du(i,k)*ql(i,k+1)+dz(i,k)*cu(i,k))
+                        !    ql(i,k) = ql1/ (1.+dz(i,k)*c0)
+                        !    defined in cldprp
+                        ! defined in q1q2_pjr
+     pflx,             &! convec. rain flux thru out btm of lev, OUT     |
+                        ! without evaporation (cal. outside)
+                        ! NOTE: [kg/m^2/s]
+     zdu,              &! detraining mass flux from deep conv., OUT      |
+                        ! i.e., updraft detrainment [mb/s]
+                        ! = du2, "unpacked", defined in cldprp
+     cmfdqr,           &! dq/dt due to moist convective rainout, OUT     |
+                        ! i.e., precipitation rate
+                        ! real(pcols,pver)
+                        ! cmfdqr(i,k) = 2.E-3*mu(i,k)*ql(i,k)-evp(i,k)
+                        ! [mb/s]
+     mu2,              &! real(pcols,pver), "packed", updraft mass flux, OUT       |-- mass fluxes
+                        ! [mb/s]
+     md2,              &! downdraft mass flux, "packed" OUT, [mb/s]               |
+     du2,              &! updraft detrainment, "packed" OUT, [mb/s]               |
+     eu2,              &! updraft entrainment, "packed" OUT, [mb/s]               |
+     ed2,              &! downdraft entrainment, "packed" OUT, [mb/s]             |
+     dp,               &! pressure thickness of layers, "packed" OUT, [mb]        | 
+                        ! 0.01*state%pdel
+     dsubcld,          &! layer thickness between lcl and maxi, OUT  ----|
+                        ! i.e., sub-cloud layer pressure thickness
+                        ! [mb] "packed"
+     jt,               &! top level index of deep convection, OUT   ----|
+                        !     integer (pcols), or updraft plume top     | 
+                        !     defined in cldprp, "packed" 
+     maxg,             &! updraft base level, cnb, OUT "packed"         |
+                        ! i.e., level with largest moist static energy  |-- indices
+     ideep,            &! position of gathered points with              | 
+                        ! cape > caplmt, OUT                            |
+     lengath,          &! total number longitudional points with        |
+                        ! cape > caplmt, OUT                        ----|
+     icwmr1            &! updraft cloud liquid water,i.e, ql, OUT
+                        ! no use [kg/kg]
+     )

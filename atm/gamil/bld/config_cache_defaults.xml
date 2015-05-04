@@ -1,0 +1,114 @@
+<?xml version="1.0"?>
+
+<config_bld>
+
+<comment>
+This is a configuration file for building GAMIL.  It is the file format
+produced by the configure script to store a build configuration.  It
+may also be read by the configure script (via setting the -defaults
+option) to provide a default build configuration.
+
+This file may be edited by hand to quickly customize a configuration.  If
+hand editing is done it should be recognized that XML parser used to read
+this file is not able to check the file for valid syntax.  Also, the
+current parser places some restrictions on the normally valid XML syntax:
+1. Attribute values must be enclosed in DOUBLE QUOTED STRINGS!!!
+</comment>
+
+<comment>
+gamil_bld    GAMIL build directory, contains .o and .mod files
+gamil_exedir Directory where GAMIL executable will be created
+gamil_root   Root directory of GAMIL distribution
+esmf_bld   Build directory for ESMF, only needed if ESMF lib will be built
+esmf_root  Root directory of ESMF distribution, only needed if ESMF lib will be built
+usr_src    User source directories to prepend to the filepath.  Multiple directories
+           are specified as a comma separated list with no embedded white space.
+</comment>
+
+<directories
+gamil_bld="."
+gamil_exedir="."
+gamil_root=""
+esmf_bld="./esmf"
+esmf_root=""
+usr_src=""
+/>
+
+<comment>
+cpl    Is flux coupler used?  0 => no, 1 => yes
+dyn    Dynamics package: eul, sld, or fv
+phys   Physics package: cam1 or ccm366
+lnd    Land model: clm2 or lsm.  Currently this value depends on the
+       phys value as follows:  cam1 => clm2, ccm366 => lsm.
+ocn    Use SST data or slab ocean model: dom or som
+sice   Sea ice package: csim4 or ccmice
+pergro Use modifications that allow perturbation growth testing
+           0 => no, 1 => yes
+</comment>
+
+<packages
+cpl="0"
+dyn="eul"
+phys="cam1"
+lnd="clm2"
+ocn="dom"
+sice="csim4"
+pergro="0"
+/>
+
+<comment>
+res   Horizontal resolution specifier.  The recognized values depend on
+      the dynamics type and are contained in the resolution_parameters.xml file.
+nlon  Number of longitude grid points
+nlat  Number of latitude grid points
+nlev  Number of vertical levels
+nadv  Number of advected constituents
+nnadv Number of non-advected constituents
+trm   Maximum Fourier wavenumber
+trn   Highest degree of the Legendre polynomials for m=0
+trk   Highest degree of the associated Legendre polynomials
+pcols Maximum number of columns in a chunk
+</comment>
+
+<resolution
+res="60x128"
+nlon=""
+nlat=""
+nlev="26"
+nadv="1"
+nnadv="4"
+trm=""
+trn=""
+trk=""
+pcols="16"
+/>
+
+<comment>
+gamil_exe    Name of GAMIL executable
+cc         User specified C compiler overrides Makefile default (linux only).
+fc         User specified Fortran compiler overrides Makefile default.
+debug      Switch to enable debugging options for Fortran compiler.
+fflags     User specified Fortran compiler options to append to Makefile defaults.
+spmd       Switch to enable or disable building SPMD version of GAMIL.
+smp        Switch to enable or disable building SMP version of GAMIL.
+nc_inc     Directory containing NetCDF include files.
+nc_lib     Directory containing NetCDF library.
+mpi_inc    Directory containing MPI include files.
+mpi_lib    Directory containing MPI library.
+</comment>
+
+<makefile
+gamil_exe="gamil"
+cc=""
+fc=""
+debug="0"
+fflags=""
+spmd=""
+smp=""
+nc_inc=""
+nc_lib=""
+mpi_inc=""
+mpi_lib=""
+/>
+
+</config_bld>

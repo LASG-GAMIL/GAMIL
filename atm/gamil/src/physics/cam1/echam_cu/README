@@ -1,0 +1,96 @@
+What are these variables?  Their I/O in cam?
+What should be done before/after the call?
+Do not delete any code part before knowing 1 and 2.
+1. What does cucall need from CAM? 
+  Read ECHAM
+  a. these via dummy
+  b. those via use module
+  c. put those into these 
+2. What does CAM need from cucall? Read CAM
+CALL cucall(           &!physics.f90
+     nglpx,            &!nglon+2 or nglon, IN
+     n2lp2,            &!nglpx, IN
+     nglon,            &!number of longitudes on PE, IN
+     nlev,             &!total vertical layers, IN
+     nlevp1,           &!nlev+1, IN
+     nlevm1,           &!nlev-1,  IN
+     ilab,             &!cloud base, local, for large scale condensation, INOUT
+                        !ilab=0 nothing
+                        !ilab=1 for subcloud levels; ilab=2 for condensation level
+     ntrac,            &!number of tracers, 0, IN
+     xtm1(:,:,:,jrow), &!tracer variables at t-dt, IN, Kg/Kg
+     xte,              &!tendencies of tracer variables, vertical diffusion
+                        !still set to 0 since ntrac=0, no tracer, INOUT [1/s]
+     tm1(:,:,jrow),    &!temperature, t-dt, [K], IN
+     qm1(:,:,jrow),    &!specific humidity, t-dt, [kg/kg] IN
+     um1(:,:,jrow),    &!zonal wind, t-dt, [m/s] IN, real wind,i.e., u/cos(lat)
+     vm1(:,:,jrow),    &!meridional wind, t-dt, [m/s] IN
+     xm1(:,:,jrow),    &!cloud water, t-dt, [kg/kg] IN
+     te(1,1),          &!T tendencies, calculated in radheat,
+                        !vertical diffusion, gravity wave drag, [K/s] INOUT
+     qe(1,1),          &!q tendencies, INOUT, [1/s] 
+     vom(1,1),         &!u tendencies, INOUT, [m/s**2]
+     vol(1,1),         &!v tendencies, INOUT
+     xe(1,1),          &!cloud water tendencies, INOUT, [1/s]
+     vervel(1,1),      &!vertical velocity, IN, [Pa/s]
+     qhfl,             &!moisture flux at the surface, IN [Kg/(m^2s)]
+     xtec,             &!temp array (nglpx,nlev), INOUT
+     app1,             &!full-level pressures, IN [Pa], mid level in CAM
+     aphp1,            &!half-level pressures, IN [Pa], interface in CAM
+     geom1,            &!geopotential height, IN [m^2/s^2]
+     rsfc,             &!convective rain, OUT [Kg/(m**2 s)]
+     ssfc,             &!convective snow, OUT [Kg/(m**2 s)]
+     aprc(:,jrow),     &!rsfc+ssfc, accum. conv. precipitation INOUT [m]
+     aprs(:,jrow),     &!accum. convective snow, INOUT [m]
+     itype,            &!temp array (nglpx), INOUT
+     loland,           &!land logical, IN
+     topmax(:,jrow),   &!Maximum convective cloud tops, INOUT [m]
+     topmaxm(:,jrow),  &!99999.0, IN
+     zsrain,           &!zonal total rain, INOUT   --|
+     zsevap,           &!zonal total evap., INOUT    |
+     zsheat,           &!zonal total heat, INOUT     |- For zonal diagn.
+     zsdiss,           &!zonal total, INOUT          | 
+     zsmelt            &!zonal total melt, INOUT   --|
+     )
+
+call zm_convr(         &! tphysbc
+     lchnk,            &! latitude, IN
+     ncol,             &! longitude, IN
+     state%t,          &! temperature, IN [K]
+     state%q,          &! specific humidity, IN [Kg/Kg]
+     precc,            &! convective precipitation rate, rain+snow, OUT [m/s]
+     cnt,              &! top level of convective activity, OUT, index
+     cnb,              &! lowest level of convective activity, OUT, index
+     pblht,            &! planetary boundary layer height, IN
+     state%zm,         &! midpoint geopotential, IN
+     state%phis,       &! surface geopotential, IN
+     state%zi,         &! geopotential at interface, IN
+     ptend%q(:,:,1),   &! q tendency, OUT, [1/s]
+     ptend%s,          &! t tendency, OUT, [cp*K/s]
+     state%pmid,       &! mid-layer pressure, IN
+     state%pint,       &! interface pressure, IN
+     state%pdel,       &! layer thickness (Pa), IN
+     ts,               &! surface temperature, IN
+     .5*ztodt,         &! time step, IN
+     cmfmc,            &! convective mass flux, OUT = mc+md,     --------| 
+     cmfcme,           &! conv. mass flux condensation - evap., OUT      |
+     nstep,            &! current time step, IN
+     tpert,            &! perturbation t by pbl, IN
+     dlf,              &! dtrain cloud water from convection, OUT        |
+     pflx,             &! convec. rain flux thru out btm of lev, OUT     |
+     zdu,              &! detraining mass flux from deep conv., OUT      |
+     cmfdqr,           &! dq/dt due to moist convective rainout, OUT     |
+     mu2,              &! for deep convective transport, OUT             |-- mass fluxes
+     md2,              &! for deep  convective transport, OUT            |
+     du2,              &! for deep convective transport, OUT             |
+     eu2,              &! for deep convective transport, OUT             |
+     ed2,              &! for deep convective transport, OUT             |
+     dp,               &! for deep convective transport, OUT             | 
+     dsubcld,          &! for deep convective transport, OUT    ---------|
+     jt,               &! top level index of deep convection, OUT   ----|
+     maxg,             &! gathered max index of deep convection, OUT    |
+                        !                                               |-- indices
+     ideep,            &! position of gathered points vs long., OUT     |
+     lengath,          &! for chem/wetdep codes, OUT                ----|
+     icwmr1            &! cloud liquid water, OUT, no use
+     )

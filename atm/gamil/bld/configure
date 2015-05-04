@@ -1,0 +1,2865 @@
+#!/usr/bin/env perl
+#-----------------------------------------------------------------------------------------------
+#
+# configure
+#
+# Produce the configuration files required to build GAMIL, i.e., Filepath,
+# misc.h, params.h, preproc.h, and Makefile.  A complete build
+# specification is written to the file config_cache.xml which may be used
+# in a subsequent invokation of configure to exactly reproduce the
+# configuration files.  All files produced by running configure are
+# written to the GAMIL build directory, which defaults to the current
+# directory.
+#
+# Optionally test that the Fortran90 compiler works (for "hello world") and
+# can resolve external references to the netCDF and MPI libraries.
+#
+# Date        Contributor         Modification
+# ---------------------------------------------------------------------------
+# 2002-05-03  Brian Eaton         Original version
+#-----------------------------------------------------------------------------------------------
+
+use strict;
+#use warnings;
+#use diagnostics;
+
+use Cwd;
+use English;
+use Getopt::Long;
+use IO::File;
+use FileHandle;
+#-----------------------------------------------------------------------------------------------
+
+my $version = '$Name: gamil2_0_1_brnchT_release3 $';                #' CVS tag used to check out GAMIL distribution
+
+autoflush STDOUT, 1;                   # Helps in debugging to have the test description
+                                       # echoed before the error messages start
+my $ProgName;
+($ProgName = $0) =~ s!(.*)/!!;         # name of program
+my $ProgDir = $1;                      # name of directory where program lives
+
+# default filenames
+my $bld_defaults = 'config_cache_defaults.xml';# name of input configure defaults file
+my $res_params = 'resolution_parameters.xml';  # name of input resolution parameters file
+my $sys_defaults = 'system_defaults.xml';      # name of input system defaults file
+my $fp_filename = 'Filepath';                  # name of output filepath file
+my $params_filename = 'params.h';              # name of output resolution cpp tokens file
+my $misc_filename = 'misc.h';                  # name of output atmlnd_share cpp tokens file
+my $preproc_filename = 'preproc.h';            # name of output land model cpp tokens file
+my $cfg_filename = 'config_cache.xml';         # name of output configuration file
+
+#-----------------------------------------------------------------------------------------------
+sub usage {
+    die <<EOF;
+SYNOPSIS
+     $ProgName [options]
+OPTIONS
+     User supplied values are denoted in angle brackets (<>).  Any value that contains
+     white-space must be quoted.  Single letter options may NOT be bundled.
+
+     -cache <file>      Name of output configuration file (default: $cfg_filename).
+     -gamil_bld <dir>     Directory where GAMIL will be built.
+     -gamil_cfg <dir>     Directory containing GAMIL configuration scripts.
+     -gamil_exe <name>    Name of the GAMIL executable.
+     -gamil_exedir <dir>  Directory where GAMIL executable will be created.
+     -gamil_root <dir>    Top level directory of GAMIL distribution.
+     -cc <name>         User specified C compiler (linux only).  Overrides Makefile default.
+     -debug             Switch to turn on building GAMIL with debugging compiler options.
+     -defaults <file>   Use a configuration cache file to provide defaults.
+     -dyn <name>        Build GAMIL with specified dynamical core [eul | sld | fv].
+     -fc <name>         User specified Fortran compiler.  Overrides Makefile default.
+     -fflags <string>   A string of user specified Fortran compiler options.  Appended to
+                        Makefile defaults.
+     -esmf_bld <dir>    Top level directory where ESMF library will be built.
+     -esmf_root <dir>   Top level directory of ESMF distribution.
+     -gmake <name>      Name of the GNU make program on your system.  Supply the absolute
+                        pathname if the program is not in your path (or fix your path).
+     -h                 Print usage to STDOUT.
+     -i                 Turns on interactive prompting.
+     -mpi_inc <dir>     Directory containing MPI include files.
+     -mpi_lib <dir>     Directory containing MPI library.
+     -nadv <n>          Set number of advected species to <n>.
+     -nc_inc <dir>      Directory containing netCDF include files.
+     -nc_lib <dir>      Directory containing netCDF library.
+     -nlat <n>          Set number of latitudes to <n>.  Must also set "-res custom".
+     -nlev <n>          Set number of levels to <n>.
+     -nlon <n>          Set number of longitudes to <n>.  Must also set "-res custom".
+     -nnadv <n>         Set number of non-advected species to <n>.
+     -pcols <n>         Set maximum number of columns in a chunk to <n>.
+     -[no]twod_yz       Switch on [off] use of a 2D decomposition in YZ for FV dynamics.
+     -pergro            Switch enables building GAMIL for perturbation growth tests.
+     -res <name>        Specify horizontal grid resolution.  Use nlatxnlon for spectral grids
+                        and dlatxdlon for fv grids (dlat and dlon are the grid cell size
+                        in degrees for latitude and longitude respectively).
+     -s                 Turns on silent mode - only fatal messages issued.
+     -[no]smp           Switch on [off] SMP parallelism.
+     -[no]spmd          Switch on [off] SPMD parallelism.
+     -[no]test          Switch on [off] testing of Fortran compiler and external libraries.
+     -trk <k>           <k> is the highest degree of the associated Legendre polynomials.
+                        Must also set "-res custom".
+     -trm <m>           <m> is the maximum Fourier wavenumber.  Must also set "-res custom".
+     -trn <n>           <n> is the highest degree of the Legendre polynomials for m=0.
+                        Must also set "-res custom".
+     -usr_src <dir1>[,<dir2>[,<dir3>[...]]]
+                        Directories containing user source code.
+     -v <n>             Set verbosity to level <n>.  1 (default), 2 or 3.
+     -version           Echo the CVS tag name used to check out this GAMIL distribution.
+     -x                 Enables expert interactive prompting mode.  (Must also specify -i.)
+EOF
+}
+
+#-----------------------------------------------------------------------------------------------
+
+my $cwd = getcwd();  # current working directory
+
+# Parse command-line options.
+my $help = 0;
+my $interactive = 0;
+my $silent = 0;
+my $expert = 0;
+my($defaults, $gamil_bld, $gamil_cfg, $gamil_exe, $gamil_exedir, $gamil_root, $esmf_bld, $esmf_lib, $esmf_root,
+   $usr_src);
+my %opts = (
+	    smp     => undef,
+	    test    => undef,
+	    twod_yz => undef,
+	    v       => 0,
+	    );
+GetOptions(
+    "cache=s"                   => \$cfg_filename,
+    "gamil_bld=s"                 => \$gamil_bld,
+    "gamil_cfg=s"                 => \$gamil_cfg,
+    "gamil_exe=s"                 => \$gamil_exe,
+    "gamil_exedir=s"              => \$gamil_exedir,
+    "gamil_root=s"                => \$gamil_root,
+    "cc=s"                      => \$opts{'cc'},
+    "debug"                     => \$opts{'debug'},
+    "defaults=s"                => \$defaults,
+    "dyn=s"                     => \$opts{'dyn'},
+    "fc=s"                      => \$opts{'fc'},
+    "fflags=s"                  => \$opts{'fflags'},
+    "esmf_bld=s"                => \$esmf_bld,
+#    "esmf_lib=s"                => \$esmf_lib,
+    "esmf_root=s"               => \$esmf_root,
+    "gmake=s"                   => \$opts{'gmake'},
+    "h|help"                    => \$help,
+    "i|interactive"             => \$interactive,
+    "mpi_inc=s"                 => \$opts{'mpi_inc'},
+    "mpi_lib=s"                 => \$opts{'mpi_lib'},
+    "nadv=s"                    => \$opts{'nadv'},
+    "nc_inc=s"                  => \$opts{'nc_inc'},
+    "nc_lib=s"                  => \$opts{'nc_lib'},
+    "nlat=s"                    => \$opts{'nlat'},
+    "nlev=s"                    => \$opts{'nlev'},
+    "nlon=s"                    => \$opts{'nlon'},
+    "nnadv=s"                   => \$opts{'nnadv'},
+    "ocn=s"                     => \$opts{'ocn'},
+    "pcols=s"                   => \$opts{'pcols'},
+    "twod_yz!"                  => \$opts{'twod_yz'},
+    "p|pergro"                  => \$opts{'pergro'},
+    "phys=s"                    => \$opts{'phys'},
+    "res=s"                     => \$opts{'res'},
+    "s|silent"                  => \$silent,
+    "sice=s"                    => \$opts{'sice'},
+    "smp!"                      => \$opts{'smp'},
+    "spmd!"                     => \$opts{'spmd'},
+    "test!"                     => \$opts{'test'},
+    "trk=s"                     => \$opts{'trk'},
+    "trm=s"                     => \$opts{'trm'},
+    "trn=s"                     => \$opts{'trn'},
+    "usr_src=s"                 => \$usr_src,
+    "v|verbose=s"               => \$opts{'verbose'},
+    "version"                   => \$opts{'version'},
+    "x"                         => \$expert,
+)  or usage();
+
+# Give usage message.
+usage() if $help;
+
+# Check for unparsed arguments
+if (@ARGV) {
+    print "ERROR: unrecognized arguments: @ARGV\n";
+    usage();
+}
+
+# Echo version info (CVS tag name for checked out model version).
+(print "$version\n" and exit) if $opts{'version'};
+
+# Validate specified option values.
+validate_options("command line", \%opts);
+
+# Define 4 print levels:
+# 0 - only issue fatal error messages
+# 1 - only informs what files are created (default)
+# 2 - echo results of basic interactive queries (-i)
+# 3 - echo results of expert interactive queries (-i -x) 
+my $print = 1;
+if ($silent) { $print = 0; }
+if ($interactive or $opts{'verbose'}==2) { $print = 2; }
+if (($interactive and $expert) or $opts{'verbose'}>=3) { $print = 3; }
+my $eol = "\n";
+if ($interactive) { $eol = "\n\n"; }
+
+# Set default for testing.  If user has set a command-line option use it.
+# Otherwise, if interactive prompting will ask user with default on, and if
+# not interactive then testing turned off.
+unless (defined $opts{'test'}) {
+    $opts{'test'} = $interactive ? 1 : 0;
+}
+
+# Print instructions for interactive use.
+if ($interactive) {
+    print <<"EOF";
+
+Entering interactive mode.  To accept the default values given in
+brackets [] just enter return.
+
+EOF
+}
+
+# Configuration.
+my $cfgdir;             # directory containing GAMIL configuration scripts
+my %cfg = ();           # build configuration
+my %usr_defaults = ();  # user defaults for the build configuration
+my %bld_defaults = ();  # defaults to produce the CCSM production version of GAMIL
+my %sys_defaults = ();  # system defaults for parallelism
+my $cfg;                # scratch scalar for options
+my $ans;                # scratch scalar for interactive answers
+my @expect;             # valid values for an option
+my $spec_grid;          # reference to hash of hashes containing spectral grid resolutions
+my $fv_grid;            # reference to hash of hashes containing finite volume grid resolutions
+my $spec_trunc;         # reference to hash of hashes containing spectral truncations
+
+#-----------------------------------------------------------------------------------------------
+# Make sure we can find required perl modules and configuration files.
+if (defined $gamil_cfg) {
+    $cfgdir = $gamil_cfg;
+} elsif (defined $ENV{GAMIL_CFGDIR}) {
+    $cfgdir = "$ENV{GAMIL_CFGDIR}";
+} elsif (defined $ENV{GAMIL_ROOT}) {
+    $cfgdir = "$ENV{GAMIL_ROOT}/models/atm/gamil/bld";
+} else {
+    if ($ProgDir) { $cfgdir = $ProgDir; }
+    else { $cfgdir = $cwd; }
+}
+if ($interactive and $expert) {
+    print "Enter directory that contains GAMIL configuration scripts [$cfgdir]: ";
+    $ans = <>; chomp $ans;
+    if ($ans =~ /\S+/) { $cfgdir = $ans; }
+}
+my $die_message =
+"** This file is supplied with the GAMIL source distribution in the\n"          .
+"** directory containing the GAMIL configuration scripts.  This directory can\n" .
+"** be specified as follows (highest to lowest precedence):\n"                 .
+"** - interactively (use -i and -x command-line options)\n"                    .
+"** - by the command-line option -gamil_cfg\n"                                   .
+"** - by the environment variable GAMIL_CFGDIR\n"                                .
+"** - by the environment variable GAMIL_ROOT (the configuration\n"               .
+"**   script directory is GAMIL_ROOT/models/atm/gamil/bld)\n"                      .
+"** The default value is the directory the contains the $ProgName script. \n";
+
+(-f "$cfgdir/$bld_defaults")  or  die <<"EOF";
+** Cannot find configure defaults file \"$bld_defaults\" in directory \"$cfgdir\" **
+$die_message
+EOF
+(-f "$cfgdir/$res_params")  or  die <<"EOF";
+** Cannot find resolution parameters file \"$res_params\" in directory \"$cfgdir\" **
+$die_message
+EOF
+(-f "$cfgdir/XML/Lite.pm")  or  die <<"EOF";
+** Cannot find perl module \"XML/Lite.pm\" in directory \"$cfgdir\" **
+$die_message
+EOF
+$cfgdir = absolute_path($cfgdir);
+
+if ($print>=3) { print "Setting GAMIL configuration script directory to $cfgdir$eol"; }
+
+#-----------------------------------------------------------------------------------------------
+# Add $cfgdir to the list of paths that Perl searches for modules
+unshift @INC, $cfgdir;
+require XML::Lite;
+
+# Can read defaults files now that we know where to find XML::Lite
+%bld_defaults = read_cfg_file( "$cfgdir/$bld_defaults" );
+if (defined $defaults && -s $defaults) { 
+    %usr_defaults = read_cfg_file( $defaults );
+}
+
+#-----------------------------------------------------------------------------------------------
+# GAMIL root directory.
+if (defined $gamil_root) {
+    $cfg = $gamil_root;
+} elsif (defined $usr_defaults{'gamil_root'}) {
+    $cfg = $usr_defaults{'gamil_root'};
+} elsif (defined $ENV{GAMIL_ROOT}) {
+    $cfg = "$ENV{GAMIL_ROOT}";
+} else {
+    $cfg = absolute_path("$cfgdir/../../../..");
+}
+if ($interactive and $expert) {
+    print "Enter GAMIL root directory [$cfg]: ";
+    $ans = <>; chomp $ans;
+    if ($ans =~ /\S+/) { $cfg = $ans; }
+}
+if (-d "$cfg/models/atm/gamil/src" and
+    -d "$cfg/models/csm_share"     and
+    -d "$cfg/models/utils"         and
+    -d "$cfg/models/lnd") {
+    $cfg{'gamil_root'} = absolute_path($cfg);
+} else {
+    die <<"EOF";
+** Invalid GAMIL root directory specified: $cfg
+** 
+** The GAMIL root directory must contain the subdirectory models/ which contains
+** the subdirectories atm/gamil/src/, csm_share/, lnd/, and utils/.
+** The GAMIL root directory is determined from the following set of options listed
+** from highest to lowest precedence:
+** * interactively, enabled by command-line option -i
+** * by the command-line option -gamil_root
+** * by a default configuration file, specified by -defaults 
+** * by the environment variable GAMIL_ROOT
+** * by the default value config_dir/../../../.. where config_dir is the
+**   directory in the GAMIL distribution that contains the configuration
+**   scripts.
+EOF
+}
+
+if ($print>=3) { print "Setting GAMIL root directory to $cfg{'gamil_root'}$eol"; }
+
+#-----------------------------------------------------------------------------------------------
+# GAMIL build directory.
+if (defined $gamil_bld) {
+    $cfg = $gamil_bld;
+} elsif (defined $usr_defaults{'gamil_bld'}) {
+    $cfg = $usr_defaults{'gamil_bld'};
+} else {
+    $cfg = $bld_defaults{'gamil_bld'};
+}
+if ($interactive) {
+    print "Enter directory where GAMIL will be built [$cfg]: ";
+    $ans = <>; chomp $ans;
+    if ($ans =~ /\S+/) { $cfg = $ans; }
+}
+if (-d $cfg or mkdirp($cfg)) {
+    $cfg{'gamil_bld'} = absolute_path($cfg);
+} else {
+    die <<"EOF";
+** Could not create the specified GAMIL build directory: $cfg
+EOF
+}
+
+# Make sure that build and GAMIL configuration script directories are different.
+# Otherwise, the standard Makefile will be overwritten.
+if ($cfgdir eq $cfg{'gamil_bld'}) {
+    die <<"EOF";
+** Invalid build directory: $cfg{'gamil_bld'}
+** The specified build directory is the same as the configuration script
+** directory.  This is not allowed because the Makefile produced by configure
+** would overwrite the standard Makefile.  Use a different build directory.
+EOF
+}
+
+if ($print>=2) { print "Setting GAMIL build directory to $cfg{'gamil_bld'}$eol"; }
+
+#-----------------------------------------------------------------------------------------------
+# GAMIL install directory.
+if (defined $gamil_exedir) {
+    $cfg = $gamil_exedir;
+} elsif (defined $usr_defaults{'gamil_exedir'}) {
+    $cfg = $usr_defaults{'gamil_exedir'};
+} else {
+    $cfg = $bld_defaults{'gamil_exedir'};
+}
+if ($interactive) {
+    print "Enter directory where GAMIL executable will be created [$cfg]: ";
+    $ans = <>; chomp $ans;
+    if ($ans =~ /\S+/) { $cfg = $ans; }
+}
+if (-d $cfg or mkdirp($cfg)) {
+    $cfg{'gamil_exedir'} = absolute_path($cfg);
+} else {
+    die <<"EOF";
+** Could not create the specified GAMIL installation directory: $cfg
+EOF
+}
+
+if ($print>=2) { print "The GAMIL executable will be created in $cfg{'gamil_exedir'}$eol"; }
+
+#-----------------------------------------------------------------------------------------------
+# ESMF lib directory.  Makefile doesn't currently support using pre-built ESMF lib.
+#if (defined $esmf_lib) {
+#    $cfg = $esmf_lib;
+#} elsif (defined $usr_defaults{'esmf_lib'} and $usr_defaults{'esmf_lib'} ne "") {
+#    $cfg = $usr_defaults{'esmf_lib'};
+#} elsif (defined $ENV{ESMF_LIB} and $ENV{ESMF_LIB} ne "") {
+#    $cfg = "$ENV{ESMF_LIB}";
+#} else {
+#    # There is no default for specifying a pre-built ESMF lib.
+#    $cfg = undef;
+#}
+#if ($interactive and $expert) {
+#    $ans = "n";
+#    print "Do you wish to use a pre-built ESMF library?  y or n [$ans]: ";
+#    $ans = <>; chomp $ans;
+#    if ($ans =~ /[Yy]/) {
+#	print "Enter name of the directory which contains the lib/ and mod/\n" .
+#	    "subdirectories [$cfg]: ";
+#	$ans = <>; chomp $ans;
+#	if ($ans =~ /\S+/) { $cfg = $ans; }
+#    }
+#}
+$cfg{'esmf_lib'} = '';
+#if (defined $cfg) {
+#    if (-d "$cfg") {
+	# Can only do this weak check for now since we don't know yet whether
+	# the debugging or optimized library version is desired (will choose it
+	# to match GAMIL option).
+#	$cfg{'esmf_lib'} = absolute_path($cfg);
+#    } else {
+#	die "** ESMF library directory does not exist: $cfg\n";
+#    }
+#    if ($print>=3) { print "Using pre-built ESMF library, top directory is $cfg{'esmf_lib'}$eol"; }
+#}
+
+#-----------------------------------------------------------------------------------------------
+# ESMF root directory.  Only need this if pre-built lib not specified.
+$cfg{'esmf_root'} = "";
+unless ($cfg{'esmf_lib'}) {
+    if (defined $esmf_root) {
+	$cfg = $esmf_root;
+    } elsif (defined $usr_defaults{'esmf_root'}) {
+	$cfg = $usr_defaults{'esmf_root'};
+    } elsif (defined $ENV{ESMF_ROOT}) {
+	$cfg = "$ENV{ESMF_ROOT}";
+    } else {
+	$cfg = "$cfg{'gamil_root'}/models/utils/esmf";
+    }
+    if ($interactive and $expert) {
+	print "Enter the root ESMF directory [$cfg]: ";
+	$ans = <>; chomp $ans;
+	if ($ans =~ /\S+/) { $cfg = $ans; }
+    }
+    if (-d $cfg and -f "$cfg/makefile") {
+	$cfg{'esmf_root'} = absolute_path($cfg);
+    } else {
+	die <<"EOF";
+** Invalid ESMF root directory specified: $cfg
+** 
+** The ESMF root directory must contain the main makefile for building the
+** ESMF library.  The directory is determined from the following set of
+** options listed from highest to lowest precedence:
+** * interactively, enabled by command-line option -i
+** * by the command-line option -esmf_root
+** * by a default configuration file, specified by -defaults 
+** * by the environment variable ESMF_ROOT
+** * by the default value gamil_root/models/utils/esmf where gamil_root is the
+**   root directory of the GAMIL distribution.
+EOF
+    }
+
+    if ($print>=3) { print "Setting ESMF root directory to $cfg{'esmf_root'}$eol"; }
+}
+
+#-----------------------------------------------------------------------------------------------
+# ESMF build directory.  Only need this if pre-built lib not specified.
+$cfg{'esmf_bld'} = "";
+unless ($cfg{'esmf_lib'}) {
+    if (defined $esmf_bld) {
+	$cfg = $esmf_bld;
+    } elsif (defined $usr_defaults{'esmf_bld'}) {
+	$cfg = $usr_defaults{'esmf_bld'};
+    } else {
+	$cfg = $bld_defaults{'esmf_bld'};
+    }
+    if ($interactive and $expert) {
+	print "Enter directory where the ESMF library will be built [$cfg]: ";
+	$ans = <>; chomp $ans;
+	if ($ans =~ /\S+/) { $cfg = $ans; }
+    }
+    if (-d $cfg or mkdirp($cfg)) {
+	$cfg{'esmf_bld'} = absolute_path($cfg);
+    } else {
+	die <<"EOF";
+** Could not create the specified ESMF build directory: $cfg
+EOF
+    }
+
+    if ($print>=3) { print "Setting ESMF build directory to $cfg{'esmf_bld'}$eol"; }
+}
+
+#-----------------------------------------------------------------------------------------------
+# User source directories.
+if (defined $usr_src) {
+    $cfg = $usr_src;
+} elsif (defined $usr_defaults{'usr_src'} and $usr_defaults{'usr_src'} ne "") {
+    $cfg = $usr_defaults{'usr_src'};
+} else {
+    # There is no default for specifying user source directories.
+    $cfg = undef;
+}
+if ($interactive and $expert) {
+    $ans = "n";
+    print "Do you wish to prepend user source directories to the GAMIL source filepath?\n" .
+          "(The GAMIL build directory is included in the filepath by default.):  y or n [$ans]: ";
+    $ans = <>; chomp $ans;
+    if ($ans =~ /[Yy]/) {
+	print "Enter the directory name, or a comma separated list of 2 or more directories\n".
+              "(no embedded white space) [$cfg]: ";
+	$ans = <>; chomp $ans;
+	if ($ans =~ /\S+/) { $cfg = $ans; }
+    }
+}
+$cfg{'usr_src'} = "";
+if (defined $cfg) {   # check that the user specified directories exist
+    my @dirs = split ',', $cfg;
+    my @adirs;
+    while ( my $dir = shift @dirs ) {
+	if (-d "$dir") {
+	    push @adirs, absolute_path($dir);
+	} else {
+	    die "** User source directory does not exist: $dir\n";
+	}
+    }
+    $cfg{'usr_src'} = join ',', @adirs;
+}
+
+if ($print>=3) { print "Setting user source directories to $cfg{'usr_src'}$eol"; }
+
+#-----------------------------------------------------------------------------------------------
+# Dynamics package
+if (defined $opts{'dyn'}) {
+    $cfg = $opts{'dyn'};
+} elsif (defined $usr_defaults{'dyn'}) {
+    $cfg = $usr_defaults{'dyn'};
+} else {
+    $cfg = $bld_defaults{'dyn'};
+}
+##if ($interactive) {
+##    $ans = get_option("Enter dynamics package; eul or sld or fv [$cfg]: ",
+##                      "eul", "sld", "fv");
+##    if ($ans) { $cfg = $ans; }
+##}
+$cfg{'dyn'} = $cfg;
+
+if ($print>=2) { print "Using $cfg{'dyn'} dynamics.$eol"; }
+
+#-----------------------------------------------------------------------------------------------
+# Physics package
+if ($cfg{'dyn'} eq "sld" or $cfg{'dyn'} eq "fv") {
+    $cfg{'phys'} = "cam1";
+    if (defined $opts{'phys'} and $opts{'phys'} eq "ccm366") {
+	print "Warning: $cfg{'dyn'} and $opts{'phys'} is not a supported model configuration.\n".
+              "Configuring GAMIL to use physics package $cfg{'phys'}\n";
+    }
+} else {
+    if (defined $opts{'phys'}) {
+	$cfg = $opts{'phys'};
+    } elsif (defined $usr_defaults{'phys'}) {
+	$cfg = $usr_defaults{'phys'};
+    } else {
+	$cfg = $bld_defaults{'phys'};
+    }
+    if ($interactive and $expert) {
+	$ans = get_option("Enter physics package; cam1 or ccm366 [$cfg]: ",
+                          "cam1", "ccm366");
+	if ($ans) { $cfg = $ans; }
+    }
+    $cfg{'phys'} = $cfg;
+}
+
+if ($print>=3) { print "Using $cfg{'phys'} physics.$eol"; }
+
+#-----------------------------------------------------------------------------------------------
+# Land model
+
+if ($cfg{'phys'} eq "cam1") {
+    $cfg{'lnd'} = "clm2";
+} else {
+    $cfg{'lnd'} = "lsm";
+}
+
+if ($print>=3) { print "Using $cfg{'lnd'} land package.$eol"; }
+
+#-----------------------------------------------------------------------------------------------
+# SST data or slab ocean model  *** Are there restrictions here? ***
+if (defined $opts{'ocn'}) {
+    $cfg = $opts{'ocn'};
+} elsif (defined $usr_defaults{'ocn'}) {
+    $cfg = $usr_defaults{'ocn'};
+} else {
+    $cfg = $bld_defaults{'ocn'};
+}
+if ($interactive and $expert) {
+    $ans = get_option("Enter ocean package; dom or som [$cfg]: ",
+                      "dom", "som");
+    if ($ans) { $cfg = $ans; }
+}
+$cfg{'ocn'} = $cfg;
+
+if ($print>=3) { print "Using $cfg{'ocn'} ocean package.$eol"; }
+
+#-----------------------------------------------------------------------------------------------
+# Sea ice package (only implemented for cam1 physics)
+$cfg{'sice'} = '';
+if ($cfg{'phys'} eq 'cam1') {
+
+    if (defined $opts{'sice'}) {
+	$cfg = $opts{'sice'};
+    } elsif (defined $usr_defaults{'sice'}) {
+	$cfg = $usr_defaults{'sice'};
+    } else {
+	$cfg = $bld_defaults{'sice'};
+    }
+    if ($interactive and $expert) {
+	$ans = get_option("Enter sea ice package; csim4 or ccmice [$cfg]: ",
+                          "csim4", "ccmice");
+	if ($ans) { $cfg = $ans; }
+    }
+    $cfg{'sice'} = $cfg;
+
+    if ($print>=3) { print "Using $cfg{'sice'} sea ice package.$eol"; }
+}
+
+#-----------------------------------------------------------------------------------------------
+# Use modifications for perturbation growth testing?
+if ($opts{'pergro'}) {
+    $cfg = 'y';
+} elsif (defined $usr_defaults{'pergro'}) {
+    $cfg = $usr_defaults{'pergro'} ? 'y' : 'n';
+} else {
+    $cfg = $bld_defaults{'pergro'} ? 'y' : 'n';
+}
+##if ($interactive) {
+##    print "Modify GAMIL for perturbation growth testing? y or n [$cfg]: ";
+##    $ans = <>; chomp $ans;
+##    if ($ans =~ /\S+/) { $cfg = $ans; }
+##}
+$cfg{'pergro'} = ($cfg =~ /[Yy]/) ? 1 : 0;
+
+##if ($print>=2) { 
+##    if ($cfg{'pergro'}) { print "Configuring GAMIL for perturbation growth testing.$eol"; }
+##    else  { print "NOT configuring GAMIL for perturbation growth testing.$eol"; }
+##}
+
+#-----------------------------------------------------------------------------------------------
+# Read the resolution parameters data
+($spec_grid, $fv_grid, $spec_trunc) = read_res_params("$cfgdir/$res_params");
+
+#-----------------------------------------------------------------------------------------------
+# Resolution
+my @grid_keys;
+unless ($cfg{'dyn'} eq 'fv') {
+    @grid_keys = sort keys %$spec_grid;
+} else {
+    @grid_keys = sort keys %$fv_grid;
+}
+if ($expert) { push @grid_keys, "custom"; }
+
+$cfg{'trm'} = '1';
+$cfg{'trn'} = '1';
+$cfg{'trk'} = '1';
+if (defined $opts{'res'} and $opts{'res'} eq 'custom') {
+
+    $cfg{'res'} = 'custom';
+
+} else {
+
+    if (defined $opts{'res'}) {
+	$cfg = $opts{'res'};
+    } elsif (defined $usr_defaults{'res'}) {
+	$cfg = $usr_defaults{'res'};
+    } else {
+	$cfg = $bld_defaults{'res'};
+    }
+    if ($interactive) {
+	my $mes;
+	unless ($cfg{'dyn'} eq 'fv') {
+	    $mes = "Choose the grid resolution.  The valid options are expressed\n".
+		"as nlatxnlon where nlat is the number of grid latitudes and nlon is the\n".
+		    "number of grid longitudes.\n";
+	} else {
+	    $mes = "Choose the finite-volume grid resolution.  The valid options are expressed\n".
+		"as dlatxdlon where dlat is the latitude cell size and dlon is the longitude\n".
+		    "cell size, both in degrees.\n";
+	}
+	$ans = get_option("$mes @grid_keys [$cfg]: ", @grid_keys);
+	if ($ans) { $cfg = $ans; }
+    }
+    # check for valid resolution spec (needed in case the default isn't valid).
+    my $old = $cfg;
+    $cfg = valid_option($old, @grid_keys)
+	or die "** stopping: invalid value of res ($old) specified as a default\n".
+	    "** expected one of: @grid_keys\n";
+    $cfg{'res'} = $cfg;
+
+    if ($print>=2) { print "Using horizontal resolution: $cfg{'res'}$eol"; }
+
+    # Set horizontal resolution parameters for valid resolution specifiers except "custom"
+    unless ($cfg{'res'} eq 'custom') {
+	my $res = $cfg{'res'};
+	my $dyn = $cfg{'dyn'};
+	if ($dyn eq 'fv') {
+	    $cfg{'nlon'} = $fv_grid->{$res}{'nlon'};
+	    $cfg{'nlat'} = $fv_grid->{$res}{'nlat'};
+	} else {
+	    $cfg{'nlon'} = $spec_grid->{$res}{'nlon'};
+	    $cfg{'nlat'} = $spec_grid->{$res}{'nlat'};
+	    # When running perturbation growth tests for sld dynamics use eul truncations
+	    if ($cfg{'pergro'}) { $dyn = 'eul'; }
+	    $cfg{'trm'} = $spec_trunc->{"$res$dyn"}{'m'};
+	    $cfg{'trn'} = $spec_trunc->{"$res$dyn"}{'n'};
+	    $cfg{'trk'} = $spec_trunc->{"$res$dyn"}{'k'};
+	}
+    }
+}
+
+if ($cfg{'res'} eq 'custom') {
+
+    # Get custom resolution
+
+    # Number of longitudes
+    $cfg = 0;
+    if (defined $opts{'nlon'}) {
+	$cfg = $opts{'nlon'};
+    } elsif (defined $usr_defaults{'nlon'}) {
+	$cfg = $usr_defaults{'nlon'};
+    }
+    if ($interactive) {
+	print "Enter number of longitude grid points [$cfg]: ";
+	$ans = <>; chomp $ans;
+	if ($ans =~ /\S+/) { $cfg = $ans; }
+    }
+    die "ERROR: invalid number of longitudes: $cfg\n" unless ($cfg>=1);
+    $cfg{'nlon'} = $cfg;
+
+    # Number of latitudes
+    $cfg = 0;
+    if (defined $opts{'nlat'}) {
+	$cfg = $opts{'nlat'};
+    } elsif (defined $usr_defaults{'nlat'}) {
+	$cfg = $usr_defaults{'nlat'};
+    }
+    if ($interactive) {
+	print "Enter number of latitude grid points [$cfg]: ";
+	$ans = <>; chomp $ans;
+	if ($ans =~ /\S+/) { $cfg = $ans; }
+    }
+    die "ERROR: invalid number of latitudes: $cfg\n" unless ($cfg>=1);
+    $cfg{'nlat'} = $cfg;
+
+    # Spectral truncation
+    unless ($cfg{'dyn'} eq 'fv') {
+
+	# M - maximum Fourier wavenumber
+	$cfg = 0;
+	if (defined $opts{'trm'}) {
+	    $cfg = $opts{'trm'};
+	} elsif (defined $usr_defaults{'trm'}) {
+	    $cfg = $usr_defaults{'trm'};
+	}
+	if ($interactive) {
+	    print "Enter M, the maximum Fourier wavenumber [$cfg]: ";
+	    $ans = <>; chomp $ans;
+	    if ($ans =~ /\S+/) { $cfg = $ans; }
+	}
+	die "ERROR: invalid spectral parameter M: $cfg\n" unless ($cfg>=1);
+	$cfg{'trm'} = $cfg;
+
+	# N - highest degree of the Legendre polynomials for m=0
+	$cfg = 0;
+	if (defined $opts{'trn'}) {
+	    $cfg = $opts{'trn'};
+	} elsif (defined $usr_defaults{'trn'}) {
+	    $cfg = $usr_defaults{'trn'};
+	}
+	if ($interactive) {
+	    print "Enter N, the highest degree of the Legendre polynomials for m=0 [$cfg]: ";
+	    $ans = <>; chomp $ans;
+	    if ($ans =~ /\S+/) { $cfg = $ans; }
+	}
+	die "ERROR: invalid spectral parameter N: $cfg\n" unless ($cfg>=1);
+	$cfg{'trn'} = $cfg;
+
+	# K - highest degree of the associated Legendre polynomials
+	$cfg = 0;
+	if (defined $opts{'trk'}) {
+	    $cfg = $opts{'trk'};
+	} elsif (defined $usr_defaults{'trk'}) {
+	    $cfg = $usr_defaults{'trk'};
+	}
+	if ($interactive) {
+	    print "Enter K, the highest degree of the associated Legendre polynomials [$cfg]: ";
+	    $ans = <>; chomp $ans;
+	    if ($ans =~ /\S+/) { $cfg = $ans; }
+	}
+	die "ERROR: invalid spectral parameter K: $cfg\n" unless ($cfg>=1);
+	$cfg{'trk'} = $cfg;
+    }
+}
+
+if ($print>=2) {
+    print "Setting number of longitudes to $cfg{'nlon'}\n";
+    print "Setting number of latitudes to $cfg{'nlat'}$eol";
+##    unless ($cfg{'dyn'} eq 'fv') {
+##	print "Setting spectral truncation parameter M to $cfg{'trm'}\n";
+##	print "Setting spectral truncation parameter N to $cfg{'trn'}\n";
+##	print "Setting spectral truncation parameter K to $cfg{'trk'}$eol";
+##    }
+}
+
+# Maximum number of columns in a chunk.
+if ($cfg{'phys'} eq 'ccm366') {
+    if (defined $opts{'pcols'} and $opts{'pcols'} != $cfg{'nlon'}) {
+	print "Warning: Physics package ccm366 only works with PCOLS = NLON\n".
+              "Setting PCOLS to $cfg{'nlon'}\n";
+    }
+    $cfg{'pcols'} = $cfg{'nlon'};
+} else {
+    if (defined $opts{'pcols'}) {
+	$cfg = $opts{'pcols'};
+    } elsif (defined $usr_defaults{'pcols'}) {
+	$cfg = $usr_defaults{'pcols'};
+    } else {
+	$cfg = $bld_defaults{'pcols'};
+    }
+    if ($interactive and $expert) {
+	print "Enter maximum number of columns in a chunk [$cfg]: ";
+	$ans = <>; chomp $ans;
+	if ($ans =~ /\S+/) { $cfg = $ans; }
+    }
+    die "ERROR: invalid chunk size: $cfg\n" unless ($cfg>=1);
+    $cfg{'pcols'} = $cfg;
+}
+
+
+if ($print>=2) { print "Setting maximum number of columns in a chunk to $cfg{'pcols'}$eol"; }
+
+# Number of vertical levels
+if (defined $opts{'nlev'}) {
+    $cfg = $opts{'nlev'};
+} elsif (defined $usr_defaults{'nlev'}) {
+    $cfg = $usr_defaults{'nlev'};
+} else {
+    $cfg = $bld_defaults{'nlev'};
+}
+if ($interactive) {
+    print "Enter number of vertical levels [$cfg]: ";
+    $ans = <>; chomp $ans;
+    if ($ans =~ /\S+/) { $cfg = $ans; }
+}
+die "ERROR: invalid number of vertical levels: $cfg\n" unless ($cfg>=1);
+$cfg{'nlev'} = $cfg;
+
+if ($print>=2) { print "Setting number of levels to $cfg{'nlev'}$eol"; }
+
+# Number of advected constituents
+if (defined $opts{'nadv'}) {
+    $cfg = $opts{'nadv'};
+} elsif (defined $usr_defaults{'nadv'}) {
+    $cfg = $usr_defaults{'nadv'};
+} else {
+    $cfg = $bld_defaults{'nadv'};
+}
+if ($interactive) {
+    print "Enter number of advected constituents [$cfg]: ";
+    $ans = <>; chomp $ans;
+    if ($ans =~ /\S+/ and $ans>=1) { $cfg = $ans; }
+}
+$cfg{'nadv'} = $cfg;
+
+if ($print>=2) { print "Setting number of advected constituents to $cfg{'nadv'}$eol"; }
+
+# Number of non-advected constituents
+if (defined $opts{'nnadv'}) {
+    $cfg = $opts{'nnadv'};
+} elsif (defined $usr_defaults{'nnadv'}) {
+    $cfg = $usr_defaults{'nnadv'};
+} else {
+    $cfg = $bld_defaults{'nnadv'};
+}
+if ($interactive) {
+    print "Enter number of non-advected constituents [$cfg]: ";
+    $ans = <>; chomp $ans;
+    if ($ans =~ /\S+/ and $ans>=0) { $cfg = $ans; }
+}
+$cfg{'nnadv'} = $cfg;
+
+if ($print>=2) { 
+    print "Setting number of non-advected constituents to $cfg{'nnadv'}$eol";
+    if ($cfg==0) {
+	print "WARNING: Setting number of non-advected constituents to 0 requires\n".
+	      "         source code modifications.$eol";
+    }
+}
+
+#-----------------------------------------------------------------------------------------------
+# Read system defaults file.
+%sys_defaults = get_sys_defaults("$cfgdir/$sys_defaults", $OSNAME);
+
+#-----------------------------------------------------------------------------------------------
+# Makefile configuration
+
+# Name of GAMIL executable.
+if (defined $gamil_exe) {
+    $cfg = $gamil_exe;
+} elsif (defined $usr_defaults{'gamil_exe'}) {
+    $cfg = $usr_defaults{'gamil_exe'};
+} else {
+    $cfg = $bld_defaults{'gamil_exe'};
+}
+if ($interactive) {
+    print "Enter name of GAMIL executable [$cfg]: ";
+    $ans = <>; chomp $ans;
+    if ($ans =~ /\S+/) { $cfg = $ans; }
+}
+$cfg{'gamil_exe'} = $cfg;
+
+if ($print>=2) { print "GAMIL executable will be called $cfg{'gamil_exe'}$eol"; }
+
+# Allow override of Makefile default Fortran compiler
+$cfg = 'default';
+if (defined $opts{'fc'}) {
+    $cfg = $opts{'fc'};
+} elsif (defined $usr_defaults{'fc'}) {
+    $cfg = $usr_defaults{'fc'};
+} elsif (defined $ENV{USER_FC}) {
+    $cfg = $ENV{USER_FC};
+}
+if ($interactive) {
+    print "Enter Fortran compiler ('default' will use Makefile setting) [$cfg]: ";
+    $ans = <>; chomp $ans;
+    if ($ans =~ /\S+/) { $cfg = $ans; }
+}
+$cfg{'fc'} = ($cfg eq 'default') ? '' : $cfg;
+
+if ($print>=2) { print "Setting Fortran compiler to $cfg$eol"; }
+
+# Allow override of Makefile default C compiler (linux platform only)
+if ($OSNAME eq 'linux') {
+    $cfg = 'default';
+    if (defined $opts{'cc'}) {
+	$cfg = $opts{'cc'};
+    } elsif (defined $usr_defaults{'cc'}) {
+	$cfg = $usr_defaults{'cc'};
+    } elsif (defined $ENV{USER_CC}) {
+	$cfg = $ENV{USER_CC};
+    }
+    if ($interactive) {
+	print "Enter C compiler ('default' will use Makefile setting) [$cfg]: ";
+	$ans = <>; chomp $ans;
+	if ($ans =~ /\S+/) { $cfg = $ans; }
+    }
+    $cfg{'cc'} = ($cfg eq 'default') ? '' : $cfg;
+
+    if ($print>=2) { print "Setting C compiler to $cfg$eol"; }
+}
+
+# Use compiler debugging options?
+if (defined $opts{'debug'}) {
+    $cfg = $opts{'debug'} ? 'y' : 'n';
+} elsif (defined $usr_defaults{'debug'}) {
+    $cfg = $usr_defaults{'debug'} ? 'y' : 'n';
+} else {
+    $cfg = $bld_defaults{'debug'} ? 'y' : 'n';
+}
+if ($interactive) {
+    print "Enable compiler debugging options? [$cfg]: ";
+    $ans = <>; chomp $ans;
+    if ($ans =~ /\S+/) { $cfg = $ans; }
+}
+$cfg{'debug'} = ($cfg =~ /[Yy]/) ? 1 : 0;
+
+if ($print>=2) { 
+    if ($cfg{'debug'}) {
+	print "Enabling compiler debugging options.$eol";
+    } else {
+	print "DISabling compiler debugging options.$eol";
+    }
+}
+
+# Append user specified compiler options to Makefile defaults
+$cfg = '';
+if (defined $opts{'fflags'}) {
+    $cfg = $opts{'fflags'};
+} elsif (defined $usr_defaults{'fflags'}) {
+    $cfg = $usr_defaults{'fflags'};
+}
+if ($interactive) {
+    print "Enter Fortran compiler options to be appended to Makefile defaults: [$cfg]: ";
+    $ans = <>; chomp $ans;
+    if ($ans =~ /\S+/) { $cfg = $ans; }
+}
+$cfg{'fflags'} = $cfg;
+
+if ($print>=2) { print "Setting additional Fortran compiler options \'$cfg\'$eol"; }
+
+# SPMD
+if (defined $opts{'spmd'}) {
+    $cfg = $opts{'spmd'} ? 'y' : 'n';
+} elsif (defined $usr_defaults{'spmd'}) {
+    $cfg = $usr_defaults{'spmd'} ? 'y' : 'n';
+} else {
+    $cfg = $sys_defaults{'spmd'} ? 'y' : 'n';
+}
+if ($interactive) {
+    print "Enable SPMD parallelism? [$cfg]: ";
+    $ans = <>; chomp $ans;
+    if ($ans =~ /\S+/) { $cfg = $ans; }
+}
+$cfg{'spmd'} = ($cfg =~ /[Yy]/) ? 1 : 0;
+
+if ($print>=2) { 
+    if ($cfg{'spmd'}) {
+	print "Enabling SPMD parallelism.$eol";
+    } else {
+	print "DISabling SPMD parallelism.$eol";
+    }
+}
+
+# SMP
+if (defined $opts{'smp'}) {
+    $cfg = $opts{'smp'} ? 'y' : 'n';
+} elsif (defined $usr_defaults{'smp'}) {
+    $cfg = $usr_defaults{'smp'} ? 'y' : 'n';
+} else {
+    $cfg = $sys_defaults{'smp'} ? 'y' : 'n';
+}
+if ($interactive) {
+    print "Enable SMP parallelism (openMP)? [$cfg]: ";
+    $ans = <>; chomp $ans;
+    if ($ans =~ /\S+/) { $cfg = $ans; }
+}
+$cfg{'smp'} = ($cfg =~ /[Yy]/) ? 1 : 0;
+
+if ($print>=2) { 
+    if ($cfg{'smp'}) {
+	print "Enabling SMP parallelism.$eol";
+    } else {
+	print "DISabling SMP parallelism.$eol";
+    }
+}
+
+# 2D decomposition for FV dynamics
+# Only activate if FV dynamics and SPMD is set
+if (defined $opts{'twod_yz'}) {
+   $cfg = $opts{'twod_yz'} ? 'y' : 'n';
+} elsif (defined $usr_defaults{'twod_yz'}) {
+   $cfg = $usr_defaults{'twod_yz'} ? 'y' : 'n';
+} else {
+   $cfg = $sys_defaults{'twod_yz'} ? 'y' : 'n';
+}
+if ($interactive && $cfg{'spmd'} && ($cfg{'dyn'} eq 'fv')) {
+   print "Enable 2D Y-Z parallelism? [$cfg]: ";
+   $ans = <>; chomp $ans;
+   if ($ans =~ /\S+/) { $cfg = $ans; }
+}
+# 2D decomp only turned on if SPMD is active
+if ( ! $cfg{'spmd'} && ($cfg =~ /[Yy]/) ) { 
+   $cfg = 'n';
+   print "Warning: non-SPMD mode and twod_yz is not a supported model configuration.\n".
+         "        Configuring GAMIL without 2D decomposition.\n";
+}
+# 2D decomp only turned on if FV dynamics is active
+if ( ($cfg{'dyn'} ne "fv") && ($cfg =~ /[Yy]/) ) {
+   $cfg = 'n';
+   print "Warning: $cfg{'dyn'} and twod_yz is not a supported model configuration.\n".
+            "         Configuring GAMIL without 2D decomposition.\n";
+}
+$cfg{'twod_yz'} = ($cfg =~ /[Yy]/) ? 1 : 0;
+   
+if ($print>=2 && ! $cfg{'spmd'} && ($cfg{'dyn'} eq 'fv') ) { 
+   if ($cfg{'twod_yz'}) {
+      print "Enabling 2D SPMD parallelism.$eol";
+   } else {
+      print "DISabling 2D SPMD parallelism.$eol";
+   }
+}
+
+# NetCDF include
+if (defined $opts{'nc_inc'}) {
+    $cfg = $opts{'nc_inc'};
+} elsif (defined $usr_defaults{'nc_inc'}) {
+    $cfg = $usr_defaults{'nc_inc'};
+} elsif (defined $ENV{INC_NETCDF}) {
+    $cfg = $ENV{INC_NETCDF};
+} else {
+    $cfg = '/usr/local/include';
+}
+if ($interactive) {
+    print "Enter directory containing NetCDF include files [$cfg]: ";
+    $ans = <>; chomp $ans;
+    if ($ans =~ /\S+/) { $cfg = $ans; }
+}
+if (-f "$cfg/netcdf.inc") {
+    $cfg{'nc_inc'} = $cfg;
+} else {
+    die <<"EOF";
+** Cannot find netcdf.inc in specified directory: $cfg
+** 
+** The NetCDF include directory is determined from the following set of options listed
+** from highest to lowest precedence:
+** * interactively, enabled by command-line option -i
+** * by the command-line option -nc_inc
+** * by a default configuration file, specified by -defaults 
+** * by the environment variable INC_NETCDF
+** * by the default value /usr/local/include
+EOF
+}
+
+if ($print>=2) { print "Found netCDF include file in $cfg{'nc_inc'}$eol"; }
+
+# NetCDF library
+if (defined $opts{'nc_lib'}) {
+    $cfg = $opts{'nc_lib'};
+} elsif (defined $usr_defaults{'nc_lib'}) {
+    $cfg = $usr_defaults{'nc_lib'};
+} elsif (defined $ENV{LIB_NETCDF}) {
+    $cfg = $ENV{LIB_NETCDF};
+} else {
+    $cfg = '/usr/local/lib';
+}
+if ($interactive) {
+    print "Enter directory containing NetCDF library [$cfg]: ";
+    $ans = <>; chomp $ans;
+    if ($ans =~ /\S+/) { $cfg = $ans; }
+}
+if (-f "$cfg/libnetcdf.a") {
+    $cfg{'nc_lib'} = $cfg;
+} else {
+    die <<"EOF";
+** Cannot find libnetcdf.a in specified directory: $cfg
+** 
+** The NetCDF library directory is determined from the following set of options listed
+** from highest to lowest precedence:
+** * interactively, enabled by command-line option -i
+** * by the command-line option -nc_lib
+** * by a default configuration file, specified by -defaults 
+** * by the environment variable LIB_NETCDF
+** * by the default value /usr/local/lib
+EOF
+}
+
+if ($print>=2) { print "Found netCDF library in $cfg{'nc_lib'}$eol"; }
+
+$cfg{'mpi_inc'} = '';
+$cfg{'mpi_lib'} = '';
+if ($cfg{'spmd'}) {
+
+    # MPI include
+    if (defined $opts{'mpi_inc'}) {
+	$cfg = $opts{'mpi_inc'};
+    } elsif (defined $usr_defaults{'mpi_inc'}) {
+	$cfg = $usr_defaults{'mpi_inc'};
+    } elsif (defined $ENV{INC_MPI}) {
+	$cfg = $ENV{INC_MPI};
+    } else {
+	if ($OSNAME eq 'aix' || $OSNAME eq 'dec_osf') {
+	    $cfg = '';
+	} else {
+	    $cfg = '/usr/local/include';
+	}
+    }
+    if ($interactive) {
+	print "Enter directory containing MPI include files [$cfg]: ";
+	$ans = <>; chomp $ans;
+	if ($ans =~ /\S+/) { $cfg = $ans; }
+    }
+    if ($cfg eq '' or -f "$cfg/mpif.h") {
+	$cfg{'mpi_inc'} = $cfg;
+    } else {
+	die <<"EOF";
+** Cannot find mpif.h in specified directory: $cfg
+** 
+** The MPI include directory is determined from the following set of options listed
+** from highest to lowest precedence:
+** * interactively, enabled by command-line option -i
+** * by the command-line option -mpi_inc
+** * by a default configuration file, specified by -defaults 
+** * by the environment variable INC_MPI
+** * by the default value /usr/local/include
+EOF
+    }
+
+    if ($print>=2 and $cfg{'mpi_inc'}) { print "Found MPI include file in $cfg{'mpi_inc'}$eol"; }
+
+    # MPI library
+    if (defined $opts{'mpi_lib'}) {
+	$cfg = $opts{'mpi_lib'};
+    } elsif (defined $usr_defaults{'mpi_lib'}) {
+	$cfg = $usr_defaults{'mpi_lib'};
+    } elsif (defined $ENV{LIB_MPI}) {
+	$cfg = $ENV{LIB_MPI};
+    } else {
+	if ($OSNAME eq 'aix' || $OSNAME eq 'dec_osf') {
+	    $cfg = '';
+	} else {
+	    $cfg = '/usr/local/lib';
+	}
+    }
+    if ($interactive) {
+	print "Enter directory containing MPI library [$cfg]: ";
+	$ans = <>; chomp $ans;
+	if ($ans =~ /\S+/) { $cfg = $ans; }
+    }
+    if ($cfg eq '' or -f "$cfg/libmpi.so" or -f "$cfg/libmpich.a") {
+	$cfg{'mpi_lib'} = $cfg;
+    } else {
+	die <<"EOF";
+** Cannot find libmpi.so or libmpich.a in specified directory: $cfg
+** 
+** The MPI library directory is determined from the following set of options listed
+** from highest to lowest precedence:
+** * interactively, enabled by command-line option -i
+** * by the command-line option -mpi_lib
+** * by a default configuration file, specified by -defaults 
+** * by the environment variable LIB_MPI
+** * by the default value /usr/local/lib
+EOF
+    }
+
+    if ($print>=2 and $cfg{'mpi_lib'}) { print "Found MPI library in $cfg{'mpi_lib'}$eol"; }
+
+}
+
+#-----------------------------------------------------------------------------------------------
+# Write configuration files:
+
+# Write the filepath file.
+write_filepath("$cfg{'gamil_bld'}/$fp_filename", %cfg);
+if ($print) { print "creating $cfg{'gamil_bld'}/$fp_filename\n"; }
+
+# Write the params.h file.
+write_params_h("$cfg{'gamil_bld'}/$params_filename", %cfg);
+if ($print) { print "creating $cfg{'gamil_bld'}/$params_filename\n"; }
+
+# Write the misc.h file.
+write_misc_h("$cfg{'gamil_bld'}/$misc_filename", %cfg);
+if ($print) { print "creating $cfg{'gamil_bld'}/$misc_filename\n"; }
+
+# Write the preproc.h file.
+write_preproc_h("$cfg{'gamil_bld'}/$preproc_filename", %cfg);
+if ($print) { print "creating $cfg{'gamil_bld'}/$preproc_filename\n"; }
+
+# Write the Makefile.
+write_makefile("$cfgdir/Makefile", "$cfg{'gamil_bld'}/Makefile", %cfg);
+if ($print) { print "creating $cfg{'gamil_bld'}/Makefile\n"; }
+
+# Write the configuration file.
+write_cfg_file("$cfg{'gamil_bld'}/$cfg_filename", %cfg);
+if ($print) { print "creating $cfg{'gamil_bld'}/$cfg_filename$eol"; }
+
+#-----------------------------------------------------------------------------------------------
+# Check if testing requested
+
+$cfg = $opts{'test'} ? 'y' : 'n';
+if ($interactive) {
+    print "Run tests on the Fortran compiler and external libraries? y or n [$cfg]: ";
+    $ans = <>; chomp $ans;
+    if ($ans =~ /\S+/) { $cfg = $ans; }
+}
+$opts{'test'} = ($cfg =~ /[Yy]/) ? 1 : 0;
+
+#-----------------------------------------------------------------------------------------------
+# Finished unless testing requested
+#-----------------------------------------------------------------------------------------------
+unless ($opts{'test'}) {
+    if ($print) { print "configure done.\n"; }
+    exit;
+}
+
+my $cwd = getcwd();  # current working directory
+chdir( $cfg{'gamil_bld'} ) || die <<"EOF";
+** Trouble changing directory to $cfg{'gamil_bld'}
+**
+EOF
+# check for GNU make in the user's path
+if ($print) { print "Looking for a valid GNU make... "; }
+my @makenames = qw(gmake gnumake make);
+if ($opts{'gmake'}) { unshift @makenames, $opts{'gmake'}; }
+my $gmake = get_gmake(@makenames);
+if ($gmake) {
+    if ($print) { print "using $gmake$eol"; }
+} else {
+    print "\n".
+          "** Cannot find a valid GNU make.  Tried:\n".
+          "@makenames\n";
+    if ($interactive) {
+	print "Enter the name of the GNU Make utility on your system.\n".
+              "This name must be in your path, or be specified with\n".
+              "an absolute pathname: ";
+	$ans = <>; chomp $ans;
+	if ($ans =~ /\S+/) { 
+	    print "Checking if $ans is a GNU Make... ";
+	    my $retval = `$ans -v 2>&1`;
+	    if ($retval =~ /GNU Make/) {
+		$gmake = $ans;
+		print "using $gmake$eol";
+	    } else {
+		die "\nEither $ans isn't in your path, or it doesn't appear to be\n".
+                    "a GNU Make.  The output from testing the -v option is\n".
+                    "$retval\n".
+                    "Stopping.\n";
+	    }
+	} else {
+	    die "Can't find valid GNU Make for testing.  Stopping.\n";
+	}
+    } else {
+	die "The name of GNU make on your system can be specified to configure via\n".
+	    "the -gmake option or using the interactive mode (-i).  Make sure this\n".
+            "name is in your path (add the appropriate directory to your PATH\n".
+	    "environment variable) or specify an absolute pathname.\n";
+    }
+}
+
+# Test for Fortran 90 compatible compiler
+if ($print) { print "Testing for Fortran 90 compatible compiler... "; }
+my $fc = check_fc($gmake, $cfgdir);
+if ($fc) {
+    if ($print) { print "using $fc$eol"; }
+}
+
+# Test NetCDF library
+if ($print) { print "Testing NetCDF library... "; }
+if (check_netcdf($gmake, $cfgdir)==0) { if ($print) { print "ok$eol"; } }
+
+# Test MPI library
+if ($cfg{'spmd'}) {
+    if ($print) { print "Testing MPI library... "; }
+    if (check_mpi($gmake, $cfgdir)==0) { if ($print) { print "ok$eol"; } }
+}
+
+#-----------------------------------------------------------------------------------------------
+# Done.
+chdir( $cwd ) || die <<"EOF";
+** Trouble changing directory back to $cwd
+**
+EOF
+if ($print) { print "configure done.\n"; }
+exit;
+
+#-----------------------------------------------------------------------------------------------
+#-----------------------------------------------------------------------------------------------
+
+sub read_cfg_file
+{
+    my ($file) = @_;
+    my $xml = XML::Lite->new( $file );
+    my $root = $xml->root_element();
+
+    # Check for valid root node
+    my $name = $root->get_name();
+    $name eq "config_bld" or die
+	"file $file is not a GAMIL configuration file\n";
+
+    # Get source and build directories
+    my $dirs = $xml->elements_by_name( "directories" );
+    my %dirs = $dirs->get_attributes();
+
+    # Get packages
+    my $pkgs = $xml->elements_by_name( "packages" );
+    my %pkgs = $pkgs->get_attributes();
+    validate_options($file, \%pkgs);
+
+    # Get resolution parameters
+    my $resparms = $xml->elements_by_name( "resolution" );
+    my %resparms = $resparms->get_attributes();
+
+    # Get settings for Makefile (parallelism and library locations)
+    my $make = $xml->elements_by_name( "makefile" );
+    my %make = $make->get_attributes();
+
+    return %dirs, %pkgs, %resparms, %make;
+}
+
+#-------------------------------------------------------------------------------
+
+sub write_cfg_file
+{
+    my ($file, %cfg) = @_;
+    my  $fh = new IO::File;
+
+    $fh->open(">$file") or die "** can't open configuration file: $file\n";
+
+    print $fh <<"EOF";
+<?xml version="1.0"?>
+
+<config_bld>
+
+<comment>
+This is a configuration file for building GAMIL.  It is the file format
+produced by the configure script to store a build configuration.  It
+may also be read by the configure script (via setting the -defaults
+option) to provide a default build configuration.
+
+This file may be edited by hand to quickly customize a configuration.  If
+hand editing is done it should be recognized that XML parser used to read
+this file is not able to check the file for valid syntax.  Also, the
+current parser places some restrictions on the normally valid XML syntax:
+1. Attribute values must be enclosed in DOUBLE QUOTED STRINGS!!!
+</comment>
+
+<comment>
+gamil_bld    GAMIL build directory, contains .o and .mod files
+gamil_exedir Directory where GAMIL executable will be created
+gamil_root   Root directory of GAMIL distribution
+esmf_bld   Build directory for ESMF, only needed if ESMF lib will be built
+esmf_root  Root directory of ESMF distribution, only needed if ESMF lib will be built
+usr_src    User source directories to prepend to the filepath.  Multiple directories
+           are specified as a comma separated list with no embedded white space.
+</comment>
+
+<directories
+gamil_bld="$cfg{'gamil_bld'}"
+gamil_exedir="$cfg{'gamil_exedir'}"
+gamil_root="$cfg{'gamil_root'}"
+esmf_bld="$cfg{'esmf_bld'}"
+esmf_root="$cfg{'esmf_root'}"
+usr_src="$cfg{'usr_src'}"
+/>
+
+<comment>
+dyn    Dynamics package: eul, sld, or fv
+phys   Physics package: cam1 or ccm366
+lnd    Land model: clm2 or lsm.  Currently this value depends on the
+       phys value as follows:  cam1 => clm2, ccm366 => lsm.
+ocn    Use SST data or slab ocean model: dom or som
+sice   Sea ice package: csim4 or ccmice
+pergro Use modifications that allow perturbation growth testing
+           0 => no, 1 => yes
+</comment>
+
+<packages
+dyn="$cfg{'dyn'}"
+phys="$cfg{'phys'}"
+lnd="$cfg{'lnd'}"
+ocn="$cfg{'ocn'}"
+sice="$cfg{'sice'}"
+pergro="$cfg{'pergro'}"
+/>
+
+<comment>
+res     Horizontal grid resolution.  Spectral dycores use Gaussian grids are specified
+        by nlat x nlon.  The finite volume dycore uses an equally spaced grid that includes
+        pole points and is specified as lat_cell_size x lon_cell_size in degrees.
+nlon    Number of longitude grid points
+nlat    Number of latitude grid points
+nlev    Number of vertical levels
+nadv    Number of advected constituents
+nnadv   Number of non-advected constituents
+trm     Maximum Fourier wavenumber
+trn     Highest degree of the Legendre polynomials for m=0
+trk     Highest degree of the associated Legendre polynomials
+pcols   Maximum number of columns in a chunk
+twod_yz Switch to enable or disable use of 2D Y-Z parallel decomposition 
+        (only used for FV dynamics)
+</comment>
+
+<resolution
+res="$cfg{'res'}"
+nlon="$cfg{'nlon'}"
+nlat="$cfg{'nlat'}"
+nlev="$cfg{'nlev'}"
+nadv="$cfg{'nadv'}"
+nnadv="$cfg{'nnadv'}"
+trm="$cfg{'trm'}"
+trn="$cfg{'trn'}"
+trk="$cfg{'trk'}"
+pcols="$cfg{'pcols'}"
+twod_yz="$cfg{'twod_yz'}"
+/>
+
+<comment>
+gamil_exe    Name of GAMIL executable
+cc         User specified C compiler overrides Makefile default.
+fc         User specified Fortran compiler overrides Makefile default.
+debug      Switch to enable debugging options for Fortran compiler.
+fflags     User specified Fortran compiler options to append to Makefile defaults.
+spmd       Switch to enable or disable building SPMD version of GAMIL.
+smp        Switch to enable or disable building SMP version of GAMIL.
+nc_inc     Directory containing NetCDF include files.
+nc_lib     Directory containing NetCDF library.
+mpi_inc    Directory containing MPI include files.
+mpi_lib    Directory containing MPI library.
+</comment>
+
+<makefile
+gamil_exe="$cfg{'gamil_exe'}"
+cc="$cfg{'cc'}"
+fc="$cfg{'fc'}"
+debug="$cfg{'debug'}"
+fflags="$cfg{'fflags'}"
+spmd="$cfg{'spmd'}"
+smp="$cfg{'smp'}"
+nc_inc="$cfg{'nc_inc'}"
+nc_lib="$cfg{'nc_lib'}"
+mpi_inc="$cfg{'mpi_inc'}"
+mpi_lib="$cfg{'mpi_lib'}"
+/>
+
+</config_bld>
+EOF
+
+    $fh->close;
+}
+
+#-------------------------------------------------------------------------------
+
+sub write_filepath
+{
+    my ($file, %cfg) = @_;
+    my  $fh = new IO::File;
+
+    $fh->open(">$file") or die "** can't open filepath file: $file\n";
+
+# User specified source directories.
+    if ($cfg{'usr_src'}  =~ /\S+/) {
+	my @dirs = split ',', $cfg{'usr_src'};
+	while ( my $dir = shift @dirs ) {
+	    print $fh "$dir\n";
+        }
+    }
+
+    my $srcdir = "$cfg{'gamil_root'}/models";
+
+# GAMIL dynamics, physics, control and shared utilities.
+# Currently the physics directory must be first because of some problem with
+# the ccm366 physics.
+    print $fh "$srcdir/atm/gamil/src/physics/$cfg{'phys'}\n";
+    print $fh "$srcdir/atm/gamil/src/physics/$cfg{'phys'}/echam_cu\n";
+    print $fh "$srcdir/atm/gamil/src/dynamics/$cfg{'dyn'}\n";
+    print $fh "$srcdir/atm/gamil/src/control\n";
+    print $fh "$srcdir/csm_share\n";
+    print $fh "$srcdir/atm/gamil/src/utils\n";
+    print $fh "$srcdir/utils/timing\n";
+
+# Parallelization utilies
+    if ($cfg{'dyn'} eq 'fv') {
+	print $fh "$srcdir/utils/pilgrim\n";
+    }
+
+# Advective transport
+    if ($cfg{'dyn'} eq 'eul' or $cfg{'dyn'} eq 'sld') {
+	print $fh "$srcdir/atm/gamil/src/advection/slt\n";
+    }
+
+# Ocean package.  When using ccm366 physics the ocean package is
+# included in the physics directory.
+    if ($cfg{'phys'} eq 'cam1') {
+	print $fh "$srcdir/atm/gamil/src/ocnsice/$cfg{'ocn'}\n";
+    }
+
+# Land package
+    if ($cfg{'lnd'} eq "lsm") {
+	print $fh "$srcdir/lnd/lsm/src\n";
+    } else {
+	print $fh "$srcdir/lnd/clm2/src/main\n";
+	print $fh "$srcdir/lnd/clm2/src/biogeophys\n";
+	print $fh "$srcdir/lnd/clm2/src/biogeochem\n";
+	print $fh "$srcdir/lnd/clm2/src/mksrfdata\n";
+	print $fh "$srcdir/lnd/clm2/src/ecosysdyn\n";
+	print $fh "$srcdir/lnd/clm2/src/riverroute\n";
+    }
+
+# Sea ice package
+    if ($cfg{'phys'} eq 'cam1') {
+	if ($cfg{'sice'} eq 'csim4') {
+	    print $fh "$srcdir/ice/csim4\n";
+	} else {
+	    print $fh "$srcdir/atm/gamil/src/ocnsice/dataicemodel\n";
+	}
+    }
+
+    $fh->close;
+}
+
+#-------------------------------------------------------------------------------
+
+sub write_params_h
+{
+    my ($file, %cfg) = @_;
+    my  $fh = new IO::File;
+
+    $fh->open(">$file") or die "** can't open header file: $file\n";
+
+    print $fh  <<"EOF";
+#ifndef PARAMS_SET
+#define PARAMS_SET
+#define PLON  $cfg{'nlon'}
+#define PLAT  $cfg{'nlat'}
+#define PLEV  $cfg{'nlev'}
+#define PLEVR $cfg{'nlev'}
+#define PCNST $cfg{'nadv'}
+#define PNATS $cfg{'nnadv'}
+#define PTRM  $cfg{'trm'}
+#define PTRN  $cfg{'trn'}
+#define PTRK  $cfg{'trk'}
+#define PCOLS $cfg{'pcols'}
+EOF
+
+    if ($cfg{'dyn'} eq 'fv') { 
+	print $fh "#define STAGGERED\n";
+       if ( $cfg{'twod_yz'} ) { 
+	   print $fh "#define TWOD_YZ\n";
+       } else {
+	   print $fh "#undef TWOD_YZ\n";
+       }
+    } else {
+	print $fh "#undef STAGGERED\n";
+    }
+    if ($cfg{'ocn'} eq 'som') { 
+	print $fh "#define COUP_SOM\n";
+    } else {
+	print $fh "#undef COUP_SOM\n";
+    }
+
+    print $fh "#endif\n";
+
+    $fh->close;
+}
+
+#-------------------------------------------------------------------------------
+
+sub write_preproc_h
+{
+    my ($file, %cfg) = @_;
+    my  $fh = new IO::File;
+
+    $fh->open(">$file") or die "** can't open header file: $file\n";
+
+    print $fh  <<"EOF";
+#ifndef PREPROC_SET
+#define PREPROC_SET
+#define COUP_CAM
+#define LSMLON  $cfg{'nlon'}
+#define LSMLAT  $cfg{'nlat'}
+#endif
+EOF
+    $fh->close;
+}
+
+#-------------------------------------------------------------------------------
+
+sub write_misc_h
+{
+    my ($file, %cfg) = @_;
+    my  $fh = new IO::File;
+
+    $fh->open(">$file") or die "** can't open header file: $file\n";
+
+    print $fh  <<"EOF";
+#ifndef MISC_SET
+#define MISC_SET
+#undef COUP_CSM
+EOF
+    if ($cfg{'spmd'}) { 
+	print $fh "#define SPMD\n";
+    } else {
+	print $fh "#undef SPMD\n";
+    }
+    if ($cfg{'pergro'}) { 
+	print $fh "#define PERGRO\n";
+    } else {
+	print $fh "#undef PERGRO\n";
+    }
+    print $fh "#endif\n";
+    $fh->close;
+}
+
+#-------------------------------------------------------------------------------
+
+sub write_makefile
+{
+    # Add macro definitions to the beginning of the Makefile
+    # in the GAMIL configuration script directory
+
+    my ($file_in, $file_out, %cfg) = @_;
+    my  $fh_in = new IO::File;
+    my  $fh_out = new IO::File;
+
+    $fh_out->open(">$file_out") or die "** can't open file: $file_out\n";
+
+    my $debug = $cfg{'debug'} ? 'TRUE' : 'FALSE';
+    my $spmd = $cfg{'spmd'} ? 'TRUE' : 'FALSE';
+    my $smp = $cfg{'smp'} ? 'TRUE' : 'FALSE';
+
+    print $fh_out  <<"EOF";
+# Make macros for GAMIL.
+
+ROOTDIR      := $cfg{'gamil_root'}
+EXENAME      := $cfg{'gamil_exe'}
+MODEL_EXEDIR := $cfg{'gamil_exedir'}
+INC_NETCDF   := $cfg{'nc_inc'}
+LIB_NETCDF   := $cfg{'nc_lib'}
+INC_MPI      := $cfg{'mpi_inc'}
+LIB_MPI      := $cfg{'mpi_lib'}
+ESMF_ROOT    := $cfg{'esmf_root'}
+ESMF_BLD     := $cfg{'esmf_bld'}
+DEBUG        := $debug
+SMP          := $smp
+USER_FC      := $cfg{'fc'}
+USER_CC      := $cfg{'cc'}
+USER_FFLAGS  := $cfg{'fflags'}
+
+EOF
+
+# Currently not writing SPMD macro to Makefile.  This forces it to be read
+# from the misc.h file which ensures consistency.
+#SPMD         := $spmd
+
+    # Copy the "template" makefile to the new makefile.
+    $fh_in->open("<$file_in") or die "** can't open file: $file_in\n";
+    while (<$fh_in>) {
+	print $fh_out $_;
+    }
+
+    $fh_out->close;
+    $fh_in->close;
+}
+
+#-------------------------------------------------------------------------------
+
+sub read_res_params
+{
+    my ($file) = @_;
+    my $xml = XML::Lite->new( $file );
+    my $root = $xml->root_element();
+    my @e;  # xml elements
+    my $e;  # an xml element
+    my %a;  # element attributes
+
+    # Check for valid root node
+    my $name = $root->get_name();
+    $name eq "resolution_parameters" or die
+	"file $file is not a resolution parameters file\n";
+
+    # Get spectral grids
+    # The "res" attribute values are the keys of %spec_grid
+    # The values are references to a hash containing the nlon, nlat keys
+    @e = $xml->elements_by_name( "spectral_grid" );
+    %a = ();
+    my %spec_grid = ();
+    while ( $e = shift @e ) {
+	%a = $e->get_attributes();
+	$spec_grid{"$a{'res'}"} = { 'nlon' => $a{'nlon'},
+				    'nlat' => $a{'nlat'}
+				  };
+    }
+
+    # Get finite volume grids
+    # The "res" attribute values are the keys of %fv_grid
+    # The values are references to a hash containing the nlon, nlat keys
+    @e = $xml->elements_by_name( "fv_grid" );
+    %a = ();
+    my %fv_grid = ();
+    while ( $e = shift @e ) {
+	%a = $e->get_attributes();
+	$fv_grid{"$a{'res'}"} = { 'nlon' => $a{'nlon'},
+				  'nlat' => $a{'nlat'}
+				};
+    }
+
+    # Get spectral truncation parameters
+    # The "res" attribute values are the keys of %spec_trunc
+    # The values are references to a hash containing the m, n, and k keys
+    @e = $xml->elements_by_name( "spectral_trunc" );
+    %a = ();
+    my %spec_trunc = ();
+    while ( $e = shift @e ) {
+	%a = $e->get_attributes();
+	$spec_trunc{"$a{'res'}"} = { 'm' => $a{'m'},
+				     'n' => $a{'n'},
+				     'k' => $a{'k'}
+				   };
+    }
+
+    return \%spec_grid, \%fv_grid, \%spec_trunc;
+}
+
+#-------------------------------------------------------------------------------
+
+sub get_sys_defaults
+{
+    my ($file, $os) = @_;
+    my $xml = XML::Lite->new( $file );
+    my $root = $xml->root_element();
+    my $e;          # xml element
+    my %a;          # element attributes
+    my %sys = ();   # return values
+
+    # Check for valid root node
+    my $name = $root->get_name();
+    $name eq "system_defaults" or die
+	"file $file is not a system defaults file\n";
+
+    # SPMD
+    $e = $xml->elements_by_name( "spmd" );
+    %a = $e->get_attributes();
+    $sys{'spmd'} = $a{$os};
+
+    # SMP
+    $e = $xml->elements_by_name( "smp" );
+    %a = $e->get_attributes();
+    $sys{'smp'} = $a{$os};
+
+    return %sys;
+}
+
+#-------------------------------------------------------------------------------
+
+sub absolute_path {
+#
+# Convert a pathname into an absolute pathname, expanding any . or .. characters.
+# Assumes pathnames refer to a local filesystem.
+# Assumes the directory separator is "/".
+#
+  my $path = shift;
+  my $cwd = getcwd();  # current working directory
+  my $abspath;         # resulting absolute pathname
+
+# Strip off any leading or trailing whitespace.  (This pattern won't match if
+# there's embedded whitespace.
+  $path =~ s!^\s*(\S*)\s*$!$1!;
+
+# Convert relative to absolute path.
+
+  if ($path =~ m!^\.$!) {          # path is "."
+      return $cwd;
+  } elsif ($path =~ m!^\./!) {     # path starts with "./"
+      $path =~ s!^\.!$cwd!;
+  } elsif ($path =~ m!^\.\.$!) {   # path is ".."
+      $path = "$cwd/..";
+  } elsif ($path =~ m!^\.\./!) {   # path starts with "../"
+      $path = "$cwd/$path";
+  } elsif ($path =~ m!^[^/]!) {    # path starts with non-slash character
+      $path = "$cwd/$path";
+  }
+
+  my ($dir, @dirs2);
+  my @dirs = split "/", $path, -1;   # The -1 prevents split from stripping trailing nulls
+                                     # This enables correct processing of the input "/".
+
+  # Remove any "" that are not leading.
+  for (my $i=0; $i<=$#dirs; ++$i) {
+      if ($i == 0 or $dirs[$i] ne "") {
+	  push @dirs2, $dirs[$i];
+      }
+  }
+  @dirs = ();
+
+  # Remove any "."
+  foreach $dir (@dirs2) {
+      unless ($dir eq ".") {
+	  push @dirs, $dir;
+      }
+  }
+  @dirs2 = ();
+
+  # Remove the "subdir/.." parts.
+  foreach $dir (@dirs) {
+    if ( $dir !~ /^\.\.$/ ) {
+        push @dirs2, $dir;
+    } else {
+        pop @dirs2;   # remove previous dir when current dir is ..
+    }
+  }
+  if ($#dirs2 == 0 and $dirs2[0] eq "") { return "/"; }
+  $abspath = join '/', @dirs2;
+  return( $abspath );
+}
+
+#-------------------------------------------------------------------------------
+
+sub subst_env_path {
+#
+# Substitute for any environment variables contained in a pathname.
+# Assumes the directory separator is "/".
+#
+  my $path = shift;
+  my $newpath;         # resulting pathname
+
+# Strip off any leading or trailing whitespace.  (This pattern won't match if
+# there's embedded whitespace.
+  $path =~ s!^\s*(\S*)\s*$!$1!;
+
+  my ($dir, @dirs2);
+  my @dirs = split "/", $path, -1;   # The -1 prevents split from stripping trailing nulls
+                                     # This enables correct processing of the input "/".
+
+  foreach $dir (@dirs) {
+    if ( $dir =~ /^\$(.+)$/ ) {
+        push @dirs2, $ENV{$1};
+    } else {
+        push @dirs2, $dir;
+    }
+  }
+  $newpath = join '/', @dirs2;
+  return( $newpath );
+}
+
+#-------------------------------------------------------------------------------
+
+sub mkdirp {
+    my ($dir) = @_;
+    my (@dirs) = split /\//, $dir;
+    my (@subdirs, $path);
+
+    # if $dir is absolute pathname then @dirs will start with ""
+    if ($dirs[0] eq "") { push @subdirs, shift @dirs; }  
+
+    while ( @dirs ) { # check that each subdir exists and mkdir if it doesn't
+	push @subdirs, shift @dirs;
+	$path = join '/', @subdirs;
+	unless (-d $path or mkdir($path, 0777)) { return 0; }
+    }
+    return 1;
+}
+
+#-------------------------------------------------------------------------------
+
+sub get_option {
+
+    my ($mes, @expect) = @_;
+    my ($ans, $expect, $max_tries);
+
+    $max_tries = 5;
+    print $mes;
+    while ($max_tries) {
+	$ans = <>; chomp $ans;
+	--$max_tries;
+	$ans =~ s/^\s+//;
+	$ans =~ s/\s+$//;
+	# Check for null response which indicates that default is accepted.
+	unless ($ans) { return ""; }
+	foreach $expect (@expect) {
+	    if ($ans =~ /^$expect$/i) { return $expect; }
+	}
+	if ($max_tries > 1) {
+	    print "$ans does not match any of the expected values: @expect\n";
+	    print "Please try again: ";
+	} elsif ($max_tries == 1) {
+	    print "$ans does not match any of the expected values: @expect\n";
+	    print "Last chance! ";
+	}
+    }
+    die "Failed to get answer to question: $mes\n";
+}
+
+#-------------------------------------------------------------------------------
+
+sub valid_option {
+
+    my ($val, @expect) = @_;
+    my ($expect);
+
+    $val =~ s/^\s+//;
+    $val =~ s/\s+$//;
+    foreach $expect (@expect) {
+	if ($val =~ /^$expect$/i) { return $expect; }
+    }
+    return undef;
+}
+
+#-------------------------------------------------------------------------------
+
+sub validate_options {
+
+    my ($source, $opts) = @_;
+    my ($opt, $old, @expect);
+    
+    # dyn
+    $opt = 'dyn';
+    @expect = ('eul', 'sld', 'fv');
+    if (defined $opts->{$opt}) {
+	$old = $opts->{$opt};
+	$opts->{$opt} = valid_option($old, @expect)
+	    or die "** invalid value of $opt ($old) specified in $source\n".
+                   "** expected one of: @expect\n";
+    }
+
+    # phys
+    $opt = 'phys';
+    @expect = ('cam1', 'ccm366');
+    if (defined $opts->{$opt}) {
+	$old = $opts->{$opt};
+	$opts->{$opt} = valid_option($old, @expect)
+	    or die "** invalid value of $opt ($old) specified in $source\n".
+                   "** expected one of: @expect\n";
+    }
+
+    # ocn
+    $opt = 'ocn';
+    @expect = ('dom', 'som');
+    if (defined $opts->{$opt}) {
+	$old = $opts->{$opt};
+	$opts->{$opt} = valid_option($old, @expect)
+	    or die "** invalid value of $opt ($old) specified in $source\n".
+                   "** expected one of: @expect\n";
+    }
+
+    # resolution
+    unless ($opts->{'res'} eq 'custom') {
+	if ( defined($opts->{'nlon'}) or defined($opts->{'nlat'}) ) {
+	    die "** must set -res option to 'custom' for the -nlon or -nlat options\n".
+		"** to be recognized\n";
+	}
+    }
+
+    unless ($opts->{'res'} eq 'custom' and $opts->{'dyn'} ne 'fv') {
+	if ( defined($opts->{'trk'}) or defined($opts->{'trm'}) or defined($opts->{'trn'}) ) {
+	    die "** must set -res option to 'custom' and -dyn to either 'eul' or 'sld'\n".
+		"** for the -trk, -trm, or -trn options to be recognized\n";
+	}
+    }
+
+}
+
+#-------------------------------------------------------------------------------
+
+sub get_gmake {
+
+# check for a valid version of GNU make in the user's path
+
+    my @makenames = @_;
+    my ($make, $retval);
+
+    foreach $make (@makenames) {
+	$retval = `$make -v 2>&1`;
+	return $make if ($retval =~ /GNU Make/);
+    }
+    return;
+}
+
+#-------------------------------------------------------------------------------
+
+sub check_fc {
+
+# Create a "hello world" test code in Fortran 90 syntax to check the compiler.
+# If successful then the name of the compiler used is returned.
+
+    my ($gmake, $cfgdir) = @_;
+    my $fh = new IO::File;
+    my $file = 'test_fc.F90';
+
+    $fh->open(">$file") or die "** can't open file: $file\n";
+
+    print $fh  <<"EOF";
+module m1
+   private
+   public :: hello
+contains
+subroutine hello()
+   implicit none
+   print *, 'hello world'
+end subroutine hello
+end module m1
+program main
+   use m1, only: hello
+   implicit none
+   call hello
+end program main
+EOF
+    $fh->close;
+
+    # execute the test_fc target in the GAMIL Makefile
+    my $cmd = "$gmake test_fc 2>&1";
+    my $out = `$cmd`;
+    if ($CHILD_ERROR) { 
+	die <<"EOF";
+**** FAILED ****
+Issued the command:
+$cmd
+
+The output was:
+$out
+EOF
+    }
+    # clean-up (Srcfiles and Depends are created by the makefile)
+    unlink 'test_fc.F90', 'test_fc.o', 'test_fc', glob("[Mm]1.[Mm][Oo][Dd]"), 'Srcfiles', 'Depends';
+
+    # search make output for name of Fortran compiler
+    $out =~ /(\w*f9\w+)/;
+    return $1;
+}
+
+#-------------------------------------------------------------------------------
+
+sub check_netcdf {
+
+# Create a test code that has an external reference to the netCDF library
+# and check that the Makefile can build it.  Returns 0 on success.
+
+    my ($gmake, $cfgdir) = @_;
+    my $fh = new IO::File;
+    my $file = 'test_nc.F90';
+
+    $fh->open(">$file") or die "** can't open file: $file\n";
+
+    print $fh  <<"EOF";
+program main
+   implicit none
+#include <netcdf.inc>
+   integer :: cmode, ncid, ret
+   ret = nf_create('foo.nc', cmode, ncid)
+end program main
+EOF
+    $fh->close;
+
+    # execute the test_nc target in the GAMIL Makefile
+    my $cmd = "$gmake test_nc 2>&1";
+    my $out = `$cmd`;
+    if ($CHILD_ERROR) { 
+	die <<"EOF";
+**** FAILED ****
+Issued the command:
+$cmd
+
+The output was:
+$out
+EOF
+    }
+
+    # clean-up (Srcfiles and Depends are created by the makefile)
+    unlink 'test_nc.F90', 'test_nc.o', 'test_nc', 'Srcfiles', 'Depends';
+
+    return 0;
+}
+
+#-------------------------------------------------------------------------------
+
+sub check_mpi {
+
+# Create a test code that has an external reference to the MPI library
+# and check that the Makefile can build it.  Returns 0 on success.
+
+    my ($gmake, $cfgdir) = @_;
+    my $fh = new IO::File;
+    my $file = 'test_mpi.F';
+
+    $fh->open(">$file") or die "** can't open file: $file\n";
+
+    print $fh  <<"EOF";
+      program test_mpi
+      implicit none
+#include <mpif.h>
+      integer :: ierr
+      call mpi_init(ierr)
+      end program test_mpi
+EOF
+    $fh->close;
+
+    # execute the test_mpi target in the GAMIL Makefile
+    my $cmd = "$gmake test_mpi 2>&1";
+    my $out = `$cmd`;
+    if ($CHILD_ERROR) { 
+	die <<"EOF";
+**** FAILED ****
+Issued the command:
+$cmd
+
+The output was:
+$out
+EOF
+    }
+
+    # clean-up (Srcfiles and Depends are created by the makefile)
+    unlink 'test_mpi.F', 'test_mpi.o', 'test_mpi', 'Srcfiles', 'Depends';
+
+    return 0;
+}
+
+#-------------------------------------------------------------------------------
+
+sub print_hash {
+    my %h = @_;
+    my ($k, $v);
+    while ( ($k,$v) = each %h ) { print "$k => $v\n"; }
+}
+
+__END__
+
+#-------------------------------------------------------------------------------
+# The following pod is used to produce the documentation for this script
+# which appears in the GAMIL User's Guide
+#-------------------------------------------------------------------------------
+
+=head4 2.1.2.1 The configure script
+
+B<configure> produces the configuration build files F<Filepath>, F<misc.h>,
+F<params.h>, F<preproc.h>, and F<Makefile>.  These files are all that is
+required to produce a GAMIL executable file.  In addition, a configuration
+cache file (F<config_cache.xml> by default) is written which may be used in
+a subsequent invokation of B<configure> to exactly reproduce the
+configuration files.  All files produced by running B<configure> are
+written in the build directory.
+
+B<configure> will optionally perform tests to validate that the Fortran
+compiler is operational and Fortran 90 compliant, and that the linker can
+resolve references to required external libraries (netCDF and possibly
+MPI).  These tests will point out problems with the user environment in a
+way that is much easier to understand than looking at the output from a
+failed build of GAMIL.  We strongly recommend that the first time GAMIL is
+built on any new machine, B<configure> should be invoked to execute these
+tests (see the B<-test> option).
+
+=head4 Options
+
+All configuration options can be specified in the following ways, listed
+in order of decreasing precedence:
+
+=over 4
+
+=item * 
+
+by invoking B<configure> in interactive prompting mode (enabled with the
+B<-i> option),
+
+=item *
+
+by setting specific options on the command-line,
+
+=item *
+
+by a default configuration cache file (specified using the B<-defaults>
+option).
+
+=back
+
+At the next level of precedence a few options can be specified by setting
+environment variables.  And finally, at the lowest precedence, many options
+have hard-coded defaults.  Most of these are located in the file
+F<config_cache_defaults.xml> in the configuration script directory.  A few
+that depend on previous settings are hard-coded in the B<configure> script.
+The hard-coded defaults will produce the standard production configuration
+of GAMIL.
+
+The interactive prompting mode has two levels: basic and expert.  The basic
+mode, which is enabled by the B<-i> option, asks the user all questions
+required to configure GAMIL, assuming that the model is built entirely from
+code that is contained in the distribution.  The expert mode, which is
+enabled by setting the B<-x> option in addition to B<-i>, allows the user
+to specify that various pieces of code required to build GAMIL may come from
+directories outside the distribution.  All the flexibility available in the
+expert interactive mode is also available from the specific options set on
+the command-line or from a user specified cache file.
+
+The following options may all be specified with either one or two leading
+dashes, e.g., B<-help> or B<--help>.  Options that can be expressed as
+single letter switches may not be clumped, e.g., B<-i -x> may NOT be
+expressed as B<-ix>.  When multiple options are listed separated by a
+vertical bar (B<|>), either version may be used.
+
+=over 4
+
+=item -cache F<file>
+
+F<file> specifies the pathname of the output configuration cache file.
+This file is not used in the build process (i.e., the Makefile does not
+depend on it), but is used instead to archive a complete description of the
+configuration of a GAMIL executable.  This file is used by the script
+B<build-namelist> for setting default namelist values that depend on the
+configuration of the GAMIL executable (e.g., which dynamics package and what
+resolution are used).
+
+Default: config_cache.xml
+
+=item -gamil_bld F<dir>
+
+F<dir> is the directory where GAMIL will be built.  It will contain all the
+.o and .mod files produced by the build.  The configuration build files
+produced by invoking B<configure> must be in this directory when the
+B<make> command is executed.  If the B<configure> command is invoked from
+another directory, the configuration files it produces must be copied or
+linked here.
+
+Default:  F<./>
+
+=item -gamil_cfg F<dir>
+
+F<dir> is the directory that contains the GAMIL configuration scripts, which
+includes perl modules as well as various defaults files that are required
+by B<configure>.  It is possible (but not recommended) to move B<configure>
+to another directory, but then the configuration script directory must be
+explicitly specified so that B<configure> can find its support files.
+Normally this directory will be determined by looking at the pathname that
+is used to invoke B<configure> (assuming that B<configure> has not been
+moved from the configuration script directory).  If B<configure> is not in
+the configuration script directory, then that directory can be specified
+either by this option, by setting the environment variable B<GAMIL_CFGDIR> to
+the configuration script directory, or by setting the environment variable
+B<GAMIL_ROOT> to the root directory of the GAMIL distribution assuming that the
+configuration directory is B<$GAMIL_ROOT/models/atm/gamil/bld>.
+
+Default:  directory part of the absolute pathname used to invoke B<configure>
+
+=item -gamil_exe F<name>
+
+F<name> is the name of the GAMIL executable file.
+
+Default: F<gamil>
+
+=item -gamil_exedir F<dir>
+
+F<dir> is the directory where the GAMIL executable will be created.
+
+Default: the GAMIL build directory
+
+=item -gamil_root F<dir>
+
+F<dir> specifies the top level directory of a GAMIL distribution.  This
+directory must contain the subdirectory F<models> which must contain the
+subdirectories F<atm>, F<csm_share>, F<ice>, and F<lnd>.
+The GAMIL root directory can also be specified by setting the environment
+variable B<GAMIL_ROOT>.
+
+Default: F<config_dir/../../../..> where F<config_dir> is the
+configuration script directory.
+
+=item -cc F<name>
+
+F<name> specifies the C compiler.  This allows the user to override the
+default setting in the F<Makefile> (linux only).  The C compiler can also
+be specified by setting the environment variable B<USER_CC>.
+
+Default: pgcc if using pgf90, otherwise use cc
+
+=item -debug
+
+Enable the compiler debugging options that are specified in the F<Makefile>.
+
+Default: no debugging
+
+=item -defaults F<file>
+
+F<file> specifies the pathname of a configuration cache file, e.g.,
+F<config_cache.xml> from a previous invocation of B<configure>, that is to
+be used to provide default values.  Note that the current configuration
+will be written to a file named F<config_cache.xml>, so the default file
+should be renamed, or be in another directory, to prevent it from being
+overwritten. Alternatively the output cache file can be renamed by using
+the B<-cache> option.
+
+Default: none
+
+=item -dyn F<name>
+
+F<name> specifies the dynamics package to be used when running GAMIL.  The
+valid options are B<eul> (Eulerian spectral dynamics), B<sld>
+(semi-Lagrangian spectral dynamics), and B<fv> (finite-volume dynamics).
+
+Default: F<eul>
+
+=item -esmf_bld F<dir>
+
+F<dir> is the top level directory where the ESMF library will be built.  It
+will contain the directories F<mod>, F<lib/libg> and/or F<lib/libO> which
+each contain subdirectories that contain machine architecture specific
+files.
+
+Default: F<gamil_bld/esmf> where F<gamil_bld> is the build directory for GAMIL.
+
+=item -esmf_root F<dir>
+
+F<dir> is the top level directory for the ESMF distribution.  This
+directory contains the main makefile for the ESMF library.  The ESMF root
+directory can also be specified by setting the environment variable
+B<ESMF_ROOT>.  Note that the ESMF library is supplied as part of the GAMIL
+distribution, and by default the supplied library is built and used by GAMIL.
+This option allows for a custom build of GAMIL that builds an ESMF library
+using source code from outside the GAMIL distribution.
+
+Default: F<gamil_root/models/utils/esmf> where F<gamil_root> is the
+root directory of the GAMIL distribution.
+
+=item -fc F<name>
+
+F<name> specifies the Fortran compiler.  This allows the user to override
+the default setting in the F<Makefile>.  The Fortran compiler can also be
+specified by setting the environment variable B<USER_FC>.
+
+Default: OS dependent
+
+=item -fflags F<string>
+
+The Fortran compiler options specified by F<string> will be appended to the
+default setting of C<FFLAGS> in the F<Makefile>.  If F<string> contains any
+whitespace it must be quoted.
+
+Default: ''
+
+=item -gmake F<name>
+
+Name of the GNU make program on your system.  Supply the absolute pathname
+if the program is not in your path (or fix your path).  This is only needed
+if testing will be done (see B<-test>).
+
+Default: The names 'gmake', 'gnumake', and 'make' are checked in order.
+
+=item -h | -help
+
+Print usage to STDOUT.
+
+=item -i | -interactive
+
+Turns on the basic interactive prompting mode.  In the basic prompt mode
+only questions required to obtain a standard configuration of GAMIL will be
+asked.  To allow configurations which require code from outside the GAMIL
+distribution, an expert prompt mode can be enabled by additionally
+specifying the B<-x> option.
+
+In either mode a default value for each setting will be determined based
+on, in order of decreasing precedence, the specific command-line option for
+that setting, a user specified default configuration cache file, an
+environment variable, or a hard-coded default.  This default value may then
+be accepted by entering "return", or overridden by the user.  Values are
+checked when possible for legality and consistency.
+
+=item -mpi_inc F<dir>
+
+F<dir> is the directory that contains the MPI library include files.
+Only SPMD versions of GAMIL require MPI.  The MPI include directory can
+also be specified by setting the environment variable B<INC_MPI>.
+
+Default: F</usr/local/include> except on IBM systems.  The IBM Fortran
+compilers B<mpxlf90> and B<mpxlf90_r> have the MPI include file location
+built in.
+
+=item -mpi_lib F<dir>
+
+F<dir> is the directory that contains the MPI library.  Only SPMD versions
+of GAMIL require MPI.  The MPI library directory can also be specified by
+setting the environment variable B<LIB_MPI>.
+
+Default: F</usr/local/lib> except on IBM systems.  The IBM Fortran
+compilers B<mpxlf90> and B<mpxlf90_r> have the MPI library location built
+in.
+
+=item -nadv F<num>
+
+F<num> is the number of advected constituents.  This value must be at least 1
+because water vapor is always an advected constituent.
+
+Default: 1
+
+=item -nc_inc F<dir>
+
+F<dir> is the directory that contains the netCDF library include files.
+All configurations of GAMIL require netCDF.  The netCDF include directory can
+also be specified by setting the environment variable B<INC_NETCDF>.
+
+Default: F</usr/local/include>
+
+=item -nc_lib F<dir>
+
+F<dir> is the directory that contains the netCDF library.  All
+configurations of GAMIL require netCDF.  The netCDF library directory can
+also be specified by setting the environment variable B<LIB_NETCDF>.
+
+Default: F</usr/local/lib>
+
+=item -nlat F<num>
+
+F<num> is the number of model grid latitudes.  This option is only
+recognized when the B<-res> option is set to B<custom>.
+
+Default: 64
+
+=item -nlev F<num>
+
+F<num> is the number of model vertical layers.
+
+Default: 26
+
+=item -nlon F<num>
+
+F<num> is the number of distinct model grid longitudes.  This option is
+only recognized when the B<-res> option is set to B<custom>.
+
+Default: 128
+
+=item -nnadv F<num>
+
+F<num> is the number of non-advected constituents.  The default value is 1
+because the prognostic cloud water is treated as a non-advected constituent.
+
+Default: 1
+
+=item -ocn F<name>
+
+I<THIS IS AN UNSUPPORTED OPTION FOR USE BY DEVELOPERS ONLY.>
+
+F<name> specifies the ocean package to be included in GAMIL.  Valid values
+are B<dom> (data ocean model) or B<som> (slab ocean model).
+
+Default: dom
+
+=item -pergro
+
+Configure GAMIL to enable perturbation growth experiments.  Note that this
+option disables parts of the GAMIL code that have been found to produce rapid
+growth of roundoff size perturbations.
+
+=item -phys F<name>
+
+I<THIS IS AN UNSUPPORTED OPTION FOR USE BY DEVELOPERS ONLY.>
+
+F<name> specifies the physics package to be included in GAMIL.  The valid
+options are B<cam1> (standard GAMIL physics), or B<ccm366> (physics package
+from CCM-3.6.6).  The cam1 physics implies the use of the B<CLM2> land
+model.  The ccm366 physics package is only supported for the B<eul>
+dynamics and implies the use of the B<LSM> land model.
+
+Default: cam1
+
+=item -res F<name>
+
+F<name> specifies the horizontal resolution.  For spectral dynamics the
+horizonal grid is Gaussian and is specified by as C<nlatxnlon> where nlat
+is the number of Gaussian latitudes and nlon is the number of distinct
+longitudes.  The valid values for spectral dynamics are B<256x512>, B<128x256>, 
+B<64x128>, B<32x64>, or B<8x16>.  For finite-volume dynamics the grid is equally
+spaced and includes the pole points.  It is specified as C<dlatxdlon> where
+dlat is the latitude cell size and dlon is the longitude cell size, both in
+degrees.  The valid values for finite-volume dynamics are B<2x2.5>, B<4x5>,
+or B<10x15>.  The valid resolutions are listed in the
+F<resolution_parameters.xml> file in the configuration script directory.
+To configure GAMIL for a resolution that is not in the
+F<resolution_parameters.xml> file the value of B<-res> must be set to
+B<custom>.
+
+I<NOTE: some of resolutions recognized by this option are for development
+puposes only.  The recognition of a resolution by this option does NOT
+imply the existence of a validated control run.>
+
+Default: 64x128
+
+=item -sice F<name>
+
+I<THIS IS AN UNSUPPORTED OPTION FOR USE BY DEVELOPERS ONLY.>
+
+F<name> specifies the sea ice package to be included in GAMIL.  The valid
+options are B<csim4> (Community Sea Ice Model, version 4), or B<ccmice>
+(sea ice package from the CCM).  These options are only available when
+using the B<cam1> physics package.
+
+Default: csim4
+
+=item -s | -silent
+
+Turns off all output to STDOUT.  Fatal error messages will still be issued
+to STDERR.
+
+=item -[no]spmd
+
+B<-spmd> enables an SPMD configuration of GAMIL.  B<-nospmd> disables an SPMD 
+configuration of GAMIL.
+
+Default: SPMD is enabled by default only on IBM systems.
+
+=item -[no]test
+
+B<-test> enables testing the Fortran compiler and external libraries and
+B<-notest> disables testing.  The tests are:
+
+=over 4
+
+=item 1
+
+Check that the Fortran compiler will successfully build a "hello world"
+program that uses Fortran 90 module syntax.
+
+=item 2
+
+Check that the Fortran compiler will successfully build a test program that
+contains an external reference to a netCDF library function.
+
+=item 3
+
+Check that the Fortran compiler will successfully build a test program that
+contains an external reference to an MPI library function, if SPMD is
+enabled.
+
+=back
+
+Default: testing off except in interactive prompting mode
+
+=item -trk F<num>
+
+F<num> is the spectral resolution parameter that specifies the highest
+degree of the associated Legendre polynomials.  This option is only
+recognized when the B<-res> option is set to B<custom>.
+
+Default: 42
+
+=item -trm F<num>
+
+F<num> is the spectral resolution parameter that specifies the maximum
+Fourier wavenumber.  This option is only recognized when the B<-res> option
+is set to B<custom>.
+
+Default: 42
+
+=item -trn F<num>
+
+F<num> is the spectral resolution parameter that specifies the highest
+degree of the Legendre polynomials for m=0.  This option is only recognized
+when the B<-res> option is set to B<custom>.
+
+Default: 42
+
+=item -usr_src F<dir1[,dir2[,dir3[...]]]>
+
+F<dir1[,dir2[,dir3[...]]]> specifies the directories containing user source
+code.  These directories will be placed, in the order in which they are
+specified, at the beginning of the F<Filepath> file.
+
+The F<Filepath> file is used by the GAMIL F<Makefile> to determine which
+source files will be compiled.  The list of source files is comprised of
+all files with F<.F90>, F<.F>, or F<.c> extensions in each directory listed
+in F<Filepath> plus the current directory.
+
+The F<Filepath> file is also used by the GAMIL F<Makefile> to determine which
+directories will be searched when looking for a source file that can be
+used to build an object file.  The search begins in the current directory,
+and then proceeds to the directories in the F<Filepath> file, in the order
+in which they are specified.  The first file found will be the one used by
+B<make> to create the object file.
+
+Default: none
+
+=item -v F<num>
+
+F<num> specifies the verbosity level of the output to STDOUT.  Level 1
+echos only the names of the files produced by B<configure>.  Level 2 adds
+echoing of the configuration specifications associated with a standard
+build of GAMIL.  Level 3 adds echoing of the specifications associated with
+an "expert" build of GAMIL.
+
+Default: 1
+
+=item -version
+
+Echo the CVS tag name that was used to check out the GAMIL distribution, then
+exit.  If no tag was used for the check-out then the string $Name: gamil2_0_1_brnchT_release3 $ will be
+echoed.
+
+=item -x
+
+Turns on the "expert" interactive mode.  See the B<-i> option for more
+details.
+
+=back
+
+=head4 Environment variables
+
+The environment variables recognized by B<configure> are the following:
+
+=over 4
+
+=item INC_NETCDF
+
+Directory containing the NetCDF include files.
+
+=item LIB_NETCDF
+
+Directory containing the NetCDF library.
+
+=item INC_MPI
+
+Directory containing the MPI include files.  This is only required when GAMIL
+is built with SPMD enabled.
+
+=item LIB_MPI
+
+Directory containing the MPI library.  This is only required when GAMIL
+is built with SPMD enabled.
+
+=item GAMIL_ROOT
+
+The root directory of the GAMIL distribution.  The directory containing the
+configuration scripts is $GAMIL_ROOT/models/atm/gamil/bld.
+
+=item GAMIL_CFGDIR
+
+The directory that contains the GAMIL configuration scripts.  This is
+provided only for the special case that the configuration scripts are taken
+from a directory outside of the GAMIL distribution.
+
+=item USER_FC
+
+User specified Fortran compiler.  Overrides Makefile default.
+
+=item USER_CC
+
+User specified C compiler.  Overrides Makefile default.  Currently only
+recognized on linux systems.
+
+=back
+
+=head4 Using configure from the command-line
+
+This section provides a few simple examples of using B<configure> from the
+command-line and building an executable in interactive prompt mode.  In a
+later section a complete configure, build, and run sequence will be
+presented in the context of a simple C shell script.
+
+The examples in this section B<all assume> that the GAMIL configuration script
+directory is located in the standard place within the GAMIL distribution.  It
+is also assumed that the GAMIL configuration directory is not in the user's
+B<PATH> environment variable.  For this reason the B<configure> script B<must
+be invoked> using an absolute pathname.  The script attempts to use the
+pathname that it was invoked with to determine the configuration script
+directory.  If this is successful then B<configure> can determine the GAMIL
+root directory without the user needing to set the GAMIL_ROOT environment
+variable.
+
+=head4 Example 1: build the default GAMIL executable
+
+The following interactive C shell session builds a default production
+version of GAMIL.  Assume that /tmp/gamilbld is a working directory
+on the user's system, and C<gamilcfg> is set to the GAMIL configuration
+directory.  We strongly recommend using the B<-test> option the first time
+GAMIL is built on any machine.  This will check that the environment is
+properly set up so that the Fortran compiler works and can successfully
+link to the netCDF and MPI (if SPMD enabled) libraries.
+
+    % cd /tmp/gamilbld
+    % $gamilcfg/configure -test 
+    creating /tmp/gamilbld/Filepath
+    creating /tmp/gamilbld/params.h
+    creating /tmp/gamilbld/misc.h
+    creating /tmp/gamilbld/preproc.h
+    creating /tmp/gamilbld/Makefile
+    creating /tmp/gamilbld/config_cache.xml
+    Looking for a valid GNU make... using gmake
+    Testing for Fortran 90 compatible compiler... using mpxlf90_r
+    Testing NetCDF library... ok
+    Testing MPI library... ok
+    configure done.
+    % gmake -j4  >! make.out
+
+We started by changing into the directory in which the GAMIL executable will
+be built.  All the files produced by C<configure> except for the cache file
+are required to be in the GAMIL build directory, so it is generally easiest
+to be in that directory when C<configure> is invoked.  This example was
+carried out on an IBM-SP node.  The testing tells us that C<gmake> is a GNU
+Make on this machine, that the Fortran compiler is C<mpxlf90_r>, and that
+the compiler can successfully reference the netCDF and MPI libraries.  We
+then issue the C<gmake> command with a C<-j4> option, which tells C<gmake>
+to use 4 processors for the build.
+Output from the make,
+except for the messages issued to STDERR, are redirected to the file
+C<make.out>.  In the event of an error during the build, the C<make.out>
+file will contain the command that was issued by C<gmake> that resulted in
+the error.
+
+=head4 Example 2: configure GAMIL to use finite-volume dynamics
+
+Suppose we type the following command-line:
+
+    % $gamilcfg/configure -dyn fv
+    ** stopping: invalid value of res (64x128) specified as a default
+    ** expected one of: 10x15 2x2.5 4x5
+
+The configure script is telling us that the default resolution of C<64x128> is
+not valid for the finite-volume dynamics.  If we specify a valid resolution
+for fv on the command-line:
+
+    % $gamilcfg/configure -dyn fv -res 2x2.5
+
+then B<configure> will successfully generate the output files.
+
+=head4 Example 3: interactive configuration of GAMIL for finite-volume dynamics
+
+The previous example illustrated that changing a single default value via
+the command-line options may fail due to dependencies between the
+configuration parameters.  One way to avoid this type of configuration
+failure is to use the interactive prompting option.  The following
+illustrates such an interactive session:
+
+   % $gamilcfg/configure -i
+
+   Entering interactive mode.  To accept the default values given in
+   brackets [] just enter return.
+
+   Enter directory where GAMIL will be built [.]: 
+   Setting GAMIL build directory to /tmp/gamilbld
+
+   Enter directory where GAMIL executable will be created [.]: 
+   The GAMIL executable will be created in /tmp/gamilbld
+
+   Enter dynamics package; eul or sld or fv [eul]: fv
+   Using fv dynamics.
+
+   Modify GAMIL for perturbation growth testing? y or n [n]: 
+   NOT configuring GAMIL for perturbation growth testing.
+
+   Choose the finite-volume grid resolution.  The valid options are expressed
+   as dlatxdlon where dlat is the latitude cell size and dlon is the longitude
+   cell size, both in degrees.
+    10x15 2x2.5 4x5 [64x128]: 2x2.5
+   Using horizontal resolution: 2x2.5
+
+   Setting number of longitudes to 144
+   Setting number of latitudes to 91
+
+   Enter number of vertical levels [26]: 
+   Setting number of levels to 26
+
+   Enter number of advected constituents [1]: 
+   Setting number of advected constituents to 1
+
+   Enter number of non-advected constituents [1]: 
+   Setting number of non-advected constituents to 1
+
+   Enter name of GAMIL executable [gamil]: 
+   GAMIL executable will be called gamil
+
+   Enter Fortran compiler ('default' will use Makefile setting) [default]: 
+   Setting Fortran compiler to default
+
+   Enable compiler debugging options? [n]: 
+   DISabling compiler debugging options.
+
+   Enter Fortran compiler options to be appended to Makefile defaults: []: 
+   Setting additional Fortran compiler options ''
+
+   Enable SPMD parallelism? [y]: 
+   Enabling SPMD parallelism.
+
+   Enter directory containing NetCDF include files [/usr/local/include]: 
+   Found netCDF include file in /usr/local/include
+
+   Enter directory containing NetCDF library [/usr/local/lib32/r4i4]: 
+   Found netCDF library in /usr/local/lib32/r4i4
+
+   Enter directory containing MPI include files []: 
+   Enter directory containing MPI library []: 
+   creating /tmp/gamilbld/Filepath
+   creating /tmp/gamilbld/params.h
+   creating /tmp/gamilbld/misc.h
+   creating /tmp/gamilbld/preproc.h
+   creating /tmp/gamilbld/Makefile
+   creating /tmp/gamilbld/config_cache.xml
+
+   Run tests on the Fortran compiler and external libraries? y or n [y]: 
+   Looking for a valid GNU make... using gmake
+
+   Testing for Fortran 90 compatible compiler... using mpxlf90_r
+
+   Testing NetCDF library... ok
+
+   Testing MPI library... ok
+
+   configure done.
+
+The only non-default options specified were to use the fv dynamics and to
+set the horizontal resolution to 2x2.5.  In interactive prompt mode
+B<configure> presents valid resolution names to the user and ensures that a
+valid value is entered.  Note that the default value presented for the
+location of the netCDF library was not the hard-coded default
+(/usr/local/lib).  This value gamile from the B<LIB_NETCDF> environment
+variable.
+
+=cut
+
+

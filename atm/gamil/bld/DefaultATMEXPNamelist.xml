@@ -1,0 +1,100 @@
+<?xml version="1.0"?>
+
+<!--
+
+	DefaultATMEXPNamelist.xml				May/2002
+
+	Values to use by default for creation of GAMIL model namelists.
+	The element names are the same as the corresponding namelist
+	variables.  Values that depend on the model configuration use
+	attributes to express the dependency.  The recognized attributes
+	are: DYNAMICS, RESOLUTION, PLEV, and PHYSICS.
+
+	$Id: DefaultATMEXPNamelist.xml,v 1.1.6.8 2002/08/28 15:26:58 erik Exp $
+-->
+<atmexp>
+
+<!-- Root directory of initial and boundary datasets from GAMIL distribution -->
+<csmdata>/export/home/wanhui/input</csmdata>
+
+<!-- Case name -->
+<caseid>run</caseid>
+
+<!-- The default filenames are given relative to the root directory
+     for the atmospheric data in the GAMIL distribution, i.e.,
+     {csmdata}/atm/gamil  where {csmdata} is the content of the
+     csmdata element.
+-->
+
+<!-- Initial condition files (relative to {csmdata}/atm/gamil) -->
+<ncdata DYNAMICS="eul" RESOLUTION="64x128"  PLEV="18" PHYSICS="ccm366">inic/gaus/cami_0000-09-01_64x128_T42_L18_ccm366_c010430.nc</ncdata>
+<ncdata DYNAMICS="eul" RESOLUTION="256x512" PLEV="26" PHYSICS="cam1"  >inic/gaus/cami_0000-01-01_256x512_L26_c020812.nc</ncdata>
+<ncdata DYNAMICS="eul" RESOLUTION="128x256" PLEV="26" PHYSICS="cam1"  >inic/gaus/cami_0000-01-01_128x256_L26_c020812.nc</ncdata>
+<ncdata DYNAMICS="eul" RESOLUTION="64x128"  PLEV="26" PHYSICS="cam1"  >inic/gaus/cami_0000-09-01_64x128_T42_L26_c020514.nc</ncdata>
+<ncdata DYNAMICS="sld" RESOLUTION="64x128"  PLEV="26" PHYSICS="cam1"  >inic/gaus/cami_0000-09-01_64x128_L26_c020514.nc</ncdata>
+<ncdata DYNAMICS="eul" RESOLUTION="48x96"   PLEV="26" PHYSICS="cam1"  >inic/gaus/cami_0000-09-01_48x96_T31_L26_c020603.nc</ncdata>
+<ncdata                RESOLUTION="32x64"   PLEV="26" PHYSICS="cam1"  >inic/gaus/cami_0000-09-01_32x64_L26_c020514.nc</ncdata>
+<ncdata                RESOLUTION="8x16"    PLEV="26" PHYSICS="cam1"  >inic/gaus/cami_0000-09-01_8x16_L26_c020514.nc</ncdata>
+<ncdata DYNAMICS="fv"  RESOLUTION="2x2.5"   PLEV="26" PHYSICS="cam1"  >inic/fv/cami_0000-09-01_2x2.5_L26_c020430.nc</ncdata>
+<ncdata DYNAMICS="fv"  RESOLUTION="4x5"     PLEV="26" PHYSICS="cam1"  >inic/fv/cami_0000-09-01_4x5L26_c020430.nc</ncdata>
+<ncdata DYNAMICS="fv"  RESOLUTION="10x15"   PLEV="26" PHYSICS="cam1"  >inic/fv/cami_0000-09-01_10x15_L26_c020430.nc</ncdata>
+
+<!-- Radiation absorptivity/emissivity lookup table dataset (relative to {csmdata}/atm/gamil) -->
+<absems_data>rad/abs_ems_factors_fastvx.052001.nc</absems_data>
+
+<!-- NOAA ozone for 1990 36x36L30 interpolate to any resolution (relative to {csmdata}/atm/gamil) -->
+<bndtvo>ozone/noaao3.1990.21999.nc</bndtvo>
+
+<!-- SST datasets (relative to {csmdata}/atm/gamil)  -->
+<bndtvs DYNAMICS="eul" RESOLUTION="64x128"  PHYSICS="ccm366">sst/T42M5079.nc</bndtvs>
+<bndtvs                RESOLUTION="256x512" PHYSICS="cam1"  >sst/sst_HadOIBl_bc_256x512_clim_c020812.nc</bndtvs>
+<bndtvs                RESOLUTION="128x256" PHYSICS="cam1"  >sst/sst_HadOIBl_bc_128x256_clim_c020812.nc</bndtvs>
+<bndtvs                RESOLUTION="64x128"  PHYSICS="cam1"  >sst/sst_HadOIBl_bc_64x128_clim_c020411.nc</bndtvs>
+<bndtvs                RESOLUTION="48x96"   PHYSICS="cam1"  >sst/sst_HadOIBl_bc_48x96_clim_c020411.nc</bndtvs>
+<bndtvs                RESOLUTION="32x64"   PHYSICS="cam1"  >sst/sst_HadOIBl_bc_32x64_clim_c020426.nc</bndtvs>
+<bndtvs                RESOLUTION="8x16"    PHYSICS="cam1"  >sst/sst_HadOIBl_bc_8x16_clim_c020411.nc</bndtvs>
+<bndtvs DYNAMICS="fv"  RESOLUTION="2x2.5"   PHYSICS="cam1"  >sst/sst_pcmdi_bc_2x2.5_clim.nc</bndtvs>
+<bndtvs DYNAMICS="fv"  RESOLUTION="4x5"     PHYSICS="cam1"  >sst/sst_HadOIBl_bc_4x5_clim_c020411.nc</bndtvs>
+<bndtvs DYNAMICS="fv"  RESOLUTION="10x15"   PHYSICS="cam1"  >sst/sst_HadOIBl_bc_10x15_clim_c020411.nc</bndtvs>
+
+<!-- Greenhouse gas dataset (relative to {csmdata}/atm/gamil) -->
+<bndtvg>ggas/noaamisc.r8.nc</bndtvg>
+
+<!-- Length of run -->
+<nelapse>-1</nelapse>
+
+<!-- Orbit -->
+<iyear_ad>1950</iyear_ad>
+
+<!-- Diffusion for Eulerian dynamics -->
+<!--
+	Note: These values are the values used in CCM2, users should do their own
+	scientific validation when using with gamil 
+-->
+
+<dif2 DYNAMICS="eul" RESOLUTION="32x64" >2.5e5</dif2>
+<dif2 DYNAMICS="eul" RESOLUTION="8x16"  >2.5e7</dif2>
+
+<dif4 DYNAMICS="eul" RESOLUTION="256x512">1.5e14</dif4>
+<dif4 DYNAMICS="eul" RESOLUTION="128x256">1.5e15</dif4>
+<dif4 DYNAMICS="eul" RESOLUTION="48x96"  >2.e16</dif4>
+<dif4 DYNAMICS="eul" RESOLUTION="32x64"  >2.e16</dif4>
+<dif4 DYNAMICS="eul" RESOLUTION="8x16"   >1.e18</dif4>
+
+<!-- Timestep size -->
+<dtime DYNAMICS="eul" RESOLUTION="256x512" >300</dtime>
+<dtime DYNAMICS="eul" RESOLUTION="128x256" >600</dtime>
+<dtime DYNAMICS="eul" RESOLUTION="48x96"   >1800</dtime>
+<dtime DYNAMICS="eul" RESOLUTION="32x64"   >1800</dtime>
+<dtime DYNAMICS="eul" RESOLUTION="8x16"    >1800</dtime>
+<dtime DYNAMICS="fv"                       >1800</dtime>
+
+<!-- reset the csim ice properties to base state -->
+<reset_csim_iceprops RESOLUTION="256x512" >.true.</reset_csim_iceprops>
+<reset_csim_iceprops RESOLUTION="128x256" >.true.</reset_csim_iceprops>
+<reset_csim_iceprops RESOLUTION="32x64"   >.true.</reset_csim_iceprops>
+<reset_csim_iceprops RESOLUTION="8x16"    >.true.</reset_csim_iceprops>
+<reset_csim_iceprops RESOLUTION="4x5"     >.true.</reset_csim_iceprops>
+<reset_csim_iceprops RESOLUTION="10x15"   >.true.</reset_csim_iceprops>
+
+</atmexp>

@@ -1,0 +1,21 @@
+!pqhfl: moisture flux at the surface, got by vdiff
+!pqte: tendency of humidity
+!paphp1: half-level pressures at all model levels at t+dt
+
+  jk = 1
+  DO jl = 1, klon
+    zdqcv(jl) = pqte(jl,jk)*(paphp1(jl,jk+1)-paphp1(jl,jk))
+!               qtg                      dpp
+  END DO
+  DO jk = 2, klev
+    DO jl = 1, klon
+      zdqcv(jl) = zdqcv(jl) + pqte(jl,jk)*(paphp1(jl,jk+1)-paphp1(jl,jk))
+!                              qtg                       dpp
+    END DO
+  END DO
+  DO jl = 1, klon
+    ktype(jl) = MERGE(1,2,zdqcv(jl)>MAX(0.,-1.1*pqhfl(jl)*g))
+!                                        srfflx_state2d(lchnk)%cflx(:ncol,1)
+  END DO
+
+

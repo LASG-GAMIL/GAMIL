@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+
+<resolution_parameters>
+
+<spectral_grid res="256x512" nlat="256" nlon="512" />
+<spectral_grid res="128x256" nlat="128" nlon="256" />
+<spectral_grid res="60x128"  nlat="60"  nlon="128" />
+<spectral_grid res="48x96"   nlat="48"  nlon="96"  />
+<spectral_grid res="32x64"   nlat="32"  nlon="64"  />
+<spectral_grid res="8x16"    nlat="8"   nlon="16"  />
+
+<fv_grid       res="2x2.5"   nlat="91"  nlon="144" />
+<fv_grid       res="4x5"     nlat="46"  nlon="72"  />
+<fv_grid       res="10x15"   nlat="19"  nlon="24"  />
+
+<spectral_trunc res="256x512eul"   m="170" n="170" k="170" />
+<spectral_trunc res="128x256eul"   m="85"  n="85"  k="85"  />
+<spectral_trunc res="60x128eul"    m="42"  n="42"  k="42"  />
+<spectral_trunc res="64x128sld"    m="63"  n="63"  k="63"  />
+<spectral_trunc res="48x96eul"     m="31"  n="31"  k="31"  />
+<spectral_trunc res="32x64eul"     m="21"  n="21"  k="21"  />
+<spectral_trunc res="32x64sld"     m="31"  n="31"  k="31"  />
+<spectral_trunc res="8x16eul"      m="5"   n="5"   k="5"   />
+<spectral_trunc res="8x16sld"      m="7"   n="7"   k="7"   />
+
+</resolution_parameters>

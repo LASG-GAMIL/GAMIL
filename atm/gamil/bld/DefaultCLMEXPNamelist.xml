@@ -1,0 +1,54 @@
+<?xml version="1.0"?>
+
+<!--
+
+       DefaultCLMEXPNamelist.xml                        Jan/2002
+
+       Values to use by default for creation of CLM model namelists.
+       The element names are the same as the corresponding namelist
+       variables.  Values that depend on the model configuration use
+       attributes to express the dependency.  The recognized attributes
+       are: DYNAMICS, RESOLUTION, PLEV, and PHYSICS.
+
+       $Id: DefaultCLMEXPNamelist.xml,v 1.1.6.6 2002/08/28 15:26:58 erik Exp $
+-->
+<clmexp>
+
+<!-- Root directory of initial and boundary datasets from GAMIL distribution -->
+<csmdata>/export/home/wanhui/input</csmdata>
+
+<!-- The default filenames are given relative to the root directory
+     for the CLM2 data in the GAMIL distribution, i.e.,
+     {csmdata}/lnd/clm2  where {csmdata} is the content of the
+     csmdata element.
+-->
+
+<!-- Plant function types (relative to {csmdata}/lnd/clm2) -->
+<fpftcon>pftdata/pft-physiology</fpftcon>
+
+<!-- Initial condition datasets (relative to {csmdata}/lnd/clm2) -->
+<finidat                RESOLUTION="64x128">inidata/gamil/clmi_0000-09-01_64x128_T42_c020514.nc</finidat>
+<finidat                RESOLUTION="48x96" >inidata/gamil/clmi_0000-09-01_48x96_T31_c020603.nc</finidat>
+<finidat DYNAMICS="fv"  RESOLUTION="2x2.5" >inidata/gamil/clmi_0000-09-01_2x2.5_c020329.nc</finidat>
+
+<!-- Surface datasets (relative to {csmdata}/lnd/clm2) -->
+<fsurdat                RESOLUTION="256x512">srfdata/gamil/clms_256x512_c020815.nc</fsurdat>
+<fsurdat                RESOLUTION="128x256">srfdata/gamil/clms_128x256_c020815.nc</fsurdat>
+<fsurdat                RESOLUTION="64x128" >srfdata/gamil/clms_64x128_c020514.nc</fsurdat>
+<fsurdat                RESOLUTION="48x96"  >srfdata/gamil/clms_48x96_c020531.nc</fsurdat>
+<fsurdat                RESOLUTION="32x64"  >srfdata/gamil/clms_32x64_c020515.nc</fsurdat>
+<fsurdat                RESOLUTION="8x16"   >srfdata/gamil/clms_8x16_c020515.nc</fsurdat>
+<fsurdat DYNAMICS="fv"  RESOLUTION="2x2.5"  >srfdata/gamil/clms_2x2.5_c020214.nc</fsurdat>
+<fsurdat DYNAMICS="fv"  RESOLUTION="4x5"    >srfdata/gamil/clms_4x5_c020412.nc</fsurdat>
+<fsurdat DYNAMICS="fv"  RESOLUTION="10x15"  >srfdata/gamil/clms_10x15_c020412.nc</fsurdat>
+
+<!-- Datasets needed to create surface datasets (relative to {csmdata}/lnd/clm2) -->
+<mksrf_fvegtyp>rawdata/mksrf_pft.nc</mksrf_fvegtyp>
+<mksrf_fsoitex>rawdata/mksrf_soitex.10level.nc</mksrf_fsoitex>
+<mksrf_fsoicol>rawdata/mksrf_soicol_clm2.nc</mksrf_fsoicol>
+<mksrf_flanwat>rawdata/mksrf_lanwat.nc</mksrf_flanwat>
+<mksrf_furban>rawdata/mksrf_urban.nc</mksrf_furban>
+<mksrf_fglacier>rawdata/mksrf_glacier.nc</mksrf_fglacier>
+<mksrf_flai>rawdata/mksrf_lai.nc</mksrf_flai>
+
+</clmexp>

@@ -1,0 +1,35 @@
+Filename:        cam/tools/README
+Original Author: Erik Kluzek
+Date:            Apr/30/1998
+Description:     Description of the cam/tools module.
+                 (Various off-line tools that operate on)
+		   (CAM input and output datasets)
+Version-Control: 
+ 
+CVS: $Id: README,v 1.8.2.1.22.1 2002/10/03 20:07:01 erik Exp $
+CVS: $Source: /fs/cgd/csm/models/CVS.REPOS/tools/atm_tools/ccm/README,v $
+CVS: $Name: cam2_0_1_brnchT_release3 $
+ 
+############################################################################
+
+I.      Description of cam/tools.
+
+cam/tools contains various off-line programs that operate on CAM input
+and output datasets.  Each of these tools requires netCDF3.x.x
+(http://www.unidata.ucar.edu/) or beyond.  It is assumed that netCDF
+has been installed under/usr/local.  If installed elsewhere, the
+environment variables $INC_NETCDF and $LIB_NETCDF must be set to point
+to the location of the netCDF include files and library, respectively.
+
+############################################################################
+
+II.     Description of tools contained in this module.
+
+1.) cprnc:		Tool to compare two CAM netCDF history files.
+			Figures out RMS and min/max differences for
+			each field. Useful for plotting error growth
+			statistics.
+			
+
+
+############################################################################

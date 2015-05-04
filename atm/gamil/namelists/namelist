@@ -1,0 +1,27 @@
+ &atmexp
+ caseid		= 'amip2-ts'
+ nsrest		= 0
+ start_ymd      = 19630101
+ start_tod      = 0
+ stop_ymd       = 20030101
+ stop_tod       = 0
+ absems_data	= '/export/home/wanhui/input/atm/gamil/rad/abs_ems_factors_fastvx.052001.nc'
+ bndtvo		= '/export/home/wanhui/input/atm/gamil/ozone/noaao3.1990.21999.nc'
+ bndtvs		= '/export/home/wanhui/input/atm/gamil/sst/amip_bcs_1962-2003_60x128.nc'
+ sstcyc         = .false.
+ ncdata	= '/export/home/wanhui/input/atm/gamil/inic/hybrid/new.si.ts.gamil.i.0011-01-01-00000.nc'
+ mfilt		= 1
+ mss_irt        = 0
+ nhtfrq		= 0
+ nrefrq		= 1
+ eccen          = 0.016715
+ obliq          = 23.441
+ mvelp          = 102.7
+ co2vmr         = 3.48e-4
+ scon           = 1.365e6
+ /
+ &clmexp
+ finidat  = '/export/home/wanhui/input/lnd/clm2/inidata/cam/new.si.ts.clm2.i.0011-01-01-00000.nc'
+ fpftcon	= '/export/home/wanhui/input/lnd/clm2/pftdata/pft-physiology'
+ fsurdat	= '/export/home/wanhui/input/lnd/clm2/srfdata/cam/surface-data.128x060.nc'
+ /

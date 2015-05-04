@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+
+<system_defaults>
+
+<spmd
+aix="1"
+dec_osf="1"
+irix="1"
+linux="1"
+solaris="0"
+/>
+
+<smp
+aix="0"
+dec_osf="0"
+irix="0"
+linux="0"
+solaris="0"
+/>
+
+</system_defaults>
