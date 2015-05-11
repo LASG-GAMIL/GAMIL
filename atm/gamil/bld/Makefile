@@ -535,7 +535,7 @@ endif
 
 ifeq ($(SPMD),TRUE)
   FFLAGS  += -I$(INC_MPI)
-  LDFLAGS += -L$(LIB_MPI) -lmpich
+  LDFLAGS += -L$(LIB_MPI)
 else
   FFLAGS  += -DHIDE_MPI
 endif
