@@ -10,7 +10,7 @@ module cloud_fraction_MG
 
     public cldfrc_MG   !  Computation of cloud fraction
 
-    real(r8), parameter :: rhminl = 0.91_r8          ! minimum rh for low stable clouds (.915_r8)
+    real(r8), parameter :: rhminl = 0.905_r8         ! minimum rh for low stable clouds (.915_r8)
     real(r8), parameter :: rhminh = 0.78_r8          ! minimum rh for high stable clouds (.80_r8)
     real(r8), parameter :: sh1    = 0.04_r8
     real(r8), parameter :: sh2    = 500.0_r8         ! parameters for shallow convection cloud fraction
