@@ -177,9 +177,6 @@ subroutine initcom
 !
    fullgrid = .true.
    do j=1,plat
-      if (masterproc) then
-         write(6,*)'nlon(',j,')=',nlon(j)
-      end if
       if (nlon(j).lt.plon) fullgrid = .false.
    end do
 !

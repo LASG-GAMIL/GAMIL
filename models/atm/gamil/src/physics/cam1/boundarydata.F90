@@ -43,6 +43,8 @@ module boundarydata
      real(r8), pointer :: cdates(:)
      real(r8), pointer :: fields(:,:,:,:,:)
      real(r8), pointer :: datainst(:,:,:,:)
+     real(r8) p0
+     real(r8), pointer :: hyai(:)
      real(r8), pointer :: hybi(:)
      real(r8), pointer :: ps(:,:,:)
   end type boundarydata_type
@@ -241,7 +243,7 @@ contains
     integer ::  latid             ! netcdf id for latitude variable
     integer ::  levid             ! netcdf id for level variable
     integer ::  timid             ! netcdf id for time variable
-    integer :: hybid
+    integer p0id, hyaid, hybid
 
     integer ::  dataid  ! netcdf id for data fields
 
@@ -338,42 +340,33 @@ contains
        bndydata%iszonal=.true.
        allocate(bndydata%lat(latsiz))
     end if
-    if(bndydata%isncol) then
-!       allocate (columnmap(ncolsiz))
-!       call handle_ncerr( nf90_inq_varid(bndydata%ncid, 'ncol'    , ncolid),&
-!            _FILE,__LINE__)
-!       call handle_ncerr( nf90_get_var(bndydata%ncid,ncolid,columnmap), &
-!            _FILE,__LINE__)
-       if(levsiz>0) then
-          allocate(bndydata%fields(pcols,levsiz,begchunk:endchunk,fieldcnt,2))
-
-          !ierr = nf90_inq_varid(bndydata%ncid, 'PS', bndydata%psid)
-		  ierr = nf_inq_varid(bndydata%ncid, 'PS', bndydata%psid)
-          !if(ierr.eq.NF90_NOERR) then
-		  if(ierr.eq.NF_NOERR) then
-             allocate(bndydata%ps(pcols,begchunk:endchunk,2))
-             allocate(bndydata%hybi(levsiz+1))
-             !call handle_ncerr(nf90_inq_varid(bndydata%ncid,'hybi',hybid),&
-             !     _FILE,__LINE__)
-			 call handle_ncerr(nf_inq_varid(bndydata%ncid,'hybi',hybid),&
-                  _FILE,__LINE__)
-             !call handle_ncerr( nf90_get_var(bndydata%ncid, hybid, bndydata%hybi ),&
-             !     _FILE,__LINE__)
-			 call wrap_get_var_realx(bndydata%ncid, hybid, bndydata%hybi )
-				  !wrap_get_var_realx (nfid, varid, arr)
-          else 
-             call endrun('Did not recognize a vertical coordinate variable')
-          end if
-       else
-          levsiz=1
-          allocate(bndydata%fields(pcols,1,begchunk:endchunk,fieldcnt,2))
-       end if
+    if (bndydata%isncol) then
+        if (levsiz > 0) then
+            allocate(bndydata%fields(pcols,levsiz,begchunk:endchunk,fieldcnt,2))
+            ierr = nf_inq_varid(bndydata%ncid, 'PS', bndydata%psid)
+            if(ierr == NF_NOERR) then
+                allocate(bndydata%ps(pcols,begchunk:endchunk,2))
+                allocate(bndydata%hyai(levsiz+1))
+                allocate(bndydata%hybi(levsiz+1))
+                call handle_ncerr(nf_inq_varid(bndydata%ncid, 'P0', p0id), _FILE, __LINE__)
+                call wrap_get_var_realx(bndydata%ncid, p0id, bndydata%p0)
+                call handle_ncerr(nf_inq_varid(bndydata%ncid, 'hybi', hyaid), _FILE, __LINE__)
+                call wrap_get_var_realx(bndydata%ncid, hyaid, bndydata%hyai)
+                call handle_ncerr(nf_inq_varid(bndydata%ncid, 'hybi', hybid), _FILE, __LINE__)
+                call wrap_get_var_realx(bndydata%ncid, hybid, bndydata%hybi )
+            else 
+                call endrun('Did not recognize a vertical coordinate variable')
+            end if
+        else
+            levsiz = 1
+            allocate(bndydata%fields(pcols, 1, begchunk:endchunk, fieldcnt, 2))
+        end if
     else
-       allocate(datain(lonsiz,levsiz,latsiz,2,fieldcnt))
-       !
-       ! Check dimension info
-       !
-       if (lonsiz/=ptrlon) then
+        allocate(datain(lonsiz,levsiz,latsiz,2,fieldcnt))
+        !
+        ! Check dimension info
+        !
+        if (lonsiz/=ptrlon) then
           call endrun ('BOUNDARYDATA_READ: longitude dependence not implemented')
        endif
 

@@ -7,81 +7,78 @@
 	INCLUDE 'PARADYN_serial'
 
 	INTEGER NE,NG,I,J,NEE,NGG
-	PARAMETER(NE=66,NG=64,NEE=6,NGG=9)
+!	PARAMETER(NE=66,NG=64,NEE=6,NGG=9)
 
-	REAL*8      YTHU1(NE),YTHV1(NE),WTGU1(NE),WTGV1(NE) !FOR E-GRID,LOCAL
-	REAL*8      YTHU2(NG),  SG (NG),   W2(NG)           !FOR G-GRID,LOCAL
+!	REAL*8      YTHU1(NE),YTHV1(NE),WTGU1(NE),WTGV1(NE) !FOR E-GRID,LOCAL
+!	REAL*8      YTHU2(NG),  SG (NG),   W2(NG)           !FOR G-GRID,LOCAL
 	REAL*8   DY,YTHU (NY),YTHV (NY),WTGU (NY),WTGV (NY) !FOR H-GRID,OUT
-	REAL*8      B(NY,NY),M(NY)                          !FOR SPLINE,LOCAL
-
-        write(6,*)
-        write(6,*) '!!!  hybrid latmesh  !!!'
-        write(6,*)
+!	REAL*8      B(NY,NY),M(NY)                          !FOR SPLINE,LOCAL
 
 !-------------- EVEN-AREA GRID -----------------
-	CALL LATMESH0(DY,YTHU1,YTHV1,WTGU1,WTGV1)
+!	CALL LATMESH0(DY,YTHU1,YTHV1,WTGU1,WTGV1)
+	CALL LATMESH0(DY,YTHU,YTHV,WTGU,WTGV)
 
 !-------------- GAUSSIAN GRID ------------------
-	CALL GAUAW(SG,W2,NG)
-	  DO J=1,NG/2
-	    YTHU2(J)     =-ASIN(SG(J))
-	    YTHU2(NG+1-J)= ASIN(SG(J))
-	  ENDDO
+!	CALL GAUAW(SG,W2,NG)
+!	  DO J=1,NG/2
+!	    YTHU2(J)     =-ASIN(SG(J))
+!	    YTHU2(NG+1-J)= ASIN(SG(J))
+!	  ENDDO
 
 !--------------- HYBRID GRID -------------------
-	DO J=1,NEE
-	  YTHU(J)     =YTHU1(J)     -PI/2.0d0
-	  YTHU(NY+1-J)=YTHU1(NE+1-J)-PI/2.0d0
-	ENDDO
-	DO J=NEE+1,NY/2
-	  YTHU(J)     =YTHU2(NGG-1+J-NEE)
-	  YTHU(NY+1-J)=YTHU2(NG+1-(NGG-1+J-NEE))
-	ENDDO
+!	DO J=1,NEE
+!	  YTHU(J)     =YTHU1(J)     -PI/2.0d0
+!	  YTHU(NY+1-J)=YTHU1(NE+1-J)-PI/2.0d0
+!	ENDDO
+!	DO J=NEE+1,NY/2
+!	  YTHU(J)     =YTHU2(NGG-1+J-NEE)
+!	  YTHU(NY+1-J)=YTHU2(NG+1-(NGG-1+J-NEE))
+!	ENDDO
 
 
 !--------- CUBIC SPLINE INTERPOLATION ----------
-	DY=PI/(NE-1)
-	DO J=1,NY
-        DO I=1,NY
-	  B(I,J)=0.0d0
-	ENDDO
-	ENDDO
+!	DY=PI/(NE-1)
+!	DO J=1,NY
+!        DO I=1,NY
+!	  B(I,J)=0.0d0
+!	ENDDO
+!	ENDDO
 
-	  B(1,1)    =2.0d0
-	  B(2,1)    =1.0d0
-	  B(NY-1,NY)=1.0d0
-	  B(NY,NY)  =2.0d0
-	  M(1)      =(YTHU(2)-YTHU(1)-DY/WTGU1(1))*6.0d0/DY/DY
-	  M(NY)     =(DY/WTGU1(NE)-YTHU(NY)+YTHU(NY-1))*6.0d0/DY/DY
+!	  B(1,1)    =2.0d0
+!	  B(2,1)    =1.0d0
+!	  B(NY-1,NY)=1.0d0
+!	  B(NY,NY)  =2.0d0
+!	  M(1)      =(YTHU(2)-YTHU(1)-DY/WTGU1(1))*6.0d0/DY/DY
+!	  M(NY)     =(DY/WTGU1(NE)-YTHU(NY)+YTHU(NY-1))*6.0d0/DY/DY
 
-	DO J=2,NY-1
-	  B(J-1,J) =1.0d0
-	  B(  J,J) =4.0d0
-	  B(J+1,J) =1.0d0
-	  M(J)     =(YTHU(J+1)-2.0d0*YTHU(J)+YTHU(J-1))*6.0d0/DY/DY
-	ENDDO
+!	DO J=2,NY-1
+!	  B(J-1,J) =1.0d0
+!	  B(  J,J) =4.0d0
+!	  B(J+1,J) =1.0d0
+!	  M(J)     =(YTHU(J+1)-2.0d0*YTHU(J)+YTHU(J-1))*6.0d0/DY/DY
+!	ENDDO
 
-	CALL EQUATION_SOLVER(B,NY,M)
+!	CALL EQUATION_SOLVER(B,NY,M)
 
-	  WTGU(1)=WTGU1(1)
-	  YTHV(1)=(YTHU(1)+YTHU(2))/2.0d0-DY*DY/16.0d0*(M(1)+M(2))
-	  WTGV(1)=1.0d0/((YTHU(2)-YTHU(1))/DY-DY/24.0d0*(M(2)-M(1)))
+!	  WTGU(1)=WTGU1(1)
+!	  YTHV(1)=(YTHU(1)+YTHU(2))/2.0d0-DY*DY/16.0d0*(M(1)+M(2))
+!	  WTGV(1)=1.0d0/((YTHU(2)-YTHU(1))/DY-DY/24.0d0*(M(2)-M(1)))
 
-	DO J=2,NY-1
-	  YTHV(J)=(YTHU(J)+YTHU(J+1))/2.0d0-DY*DY/16.0d0*(M(J)+M(J+1))
-	  WTGU(J)=1.0/((YTHU(J)-YTHU(J-1))/DY+DY/6.0*(2.0*M(j)+M(J-1)))
-	  WTGV(J)=1.0/((YTHU(J+1)-YTHU(J))/DY-DY/24.0*(M(J+1)-M(J)))
-	ENDDO
+!	DO J=2,NY-1
+!	  YTHV(J)=(YTHU(J)+YTHU(J+1))/2.0d0-DY*DY/16.0d0*(M(J)+M(J+1))
+!	  WTGU(J)=1.0/((YTHU(J)-YTHU(J-1))/DY+DY/6.0*(2.0*M(j)+M(J-1)))
+!	  WTGV(J)=1.0/((YTHU(J+1)-YTHU(J))/DY-DY/24.0*(M(J+1)-M(J)))
+!	ENDDO
 
-	  WTGU(NY)=WTGU1(NE)
-       	  YTHV(NY)=YTHU(NY)
-	  WTGV(NY)=WTGU(NY)
+!	  WTGU(NY)=WTGU1(NE)
+!       	  YTHV(NY)=YTHU(NY)
+!	  WTGV(NY)=WTGU(NY)
 
 !------------------------------------------
-        DO J=1,NY
-	  YTHU(J)=YTHU(J)+PI/2.0d0
-	  YTHV(J)=YTHV(J)+PI/2.0d0
-	ENDDO
+!        DO J=1,NY
+!	  YTHU(J)=YTHU(J)+PI/2.0d0
+!	  YTHV(J)=YTHV(J)+PI/2.0d0
+!	ENDDO
 
 !!	write(*,'(1x,i4,4f20.16)') (j,ythu(j),ythv(j),wtgu(j),wtgv(j),j=1,ny)
 
@@ -99,7 +96,8 @@
 !!	REAL PI
 !!	PARAMETER(PI=3.141592653589793)
 	INTEGER NY0
-	PARAMETER(NY0=66)
+!	PARAMETER(NY0=66)
+	PARAMETER(NY0=NY)
 !
 !     1) INPUT VARIABLE: NONE
 !     2) INPUT CONSTANT: NY0,PI

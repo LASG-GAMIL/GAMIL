@@ -4396,9 +4396,13 @@ end function sec2hms
       integer :: numrecv(0:npes-1)     ! number of items to be received
       integer :: displs(0:npes-1)      ! displacement array
       integer :: numsend               ! number of items to send
+      real(r8), allocatable :: recvbuff(:)
 
       call compute_gsfactors (numperlat, numsend, numrecv, displs)
-      call mpigatherv (arr, numsend, mpir8, arr, numrecv, displs, mpir8, 0, mpicom)
+      allocate(recvbuff(sum(numrecv)))
+      call mpigatherv (arr, numsend, mpir8, recvbuff, numrecv, displs, mpir8, 0, mpicom)
+      arr(1:numsend) = recvbuff
+      deallocate(recvbuff)
 #endif
 
       return
@@ -4436,9 +4440,13 @@ end function sec2hms
       integer :: numrecv(0:npes-1)     ! number of items to be received
       integer :: displs(0:npes-1)      ! displacement array
       integer :: numsend               ! number of items to send
+      real(r8), allocatable :: recvbuff(:)
 
       call compute_gsfactors (numperlat, numsend, numrecv, displs)
-      call mpigatherv (arr, numsend, mpir8, arr, numrecv, displs, mpir8, 0, mpicom)
+      allocate(recvbuff(sum(numrecv)))
+      call mpigatherv (arr, numsend, mpir8, recvbuff, numrecv, displs, mpir8, 0, mpicom)
+      arr(1:numsend) = recvbuff
+      deallocate(recvbuff)
 #endif
 
       if (masterproc) then

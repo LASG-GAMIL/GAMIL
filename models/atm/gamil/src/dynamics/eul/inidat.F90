@@ -215,7 +215,8 @@ contains
                   trunits)
 			   write(6,*) "CWAT",tracid(m),"m=",m,"--sxj--"
                if (trunits(1:5) .ne. 'KG/KG' .and. &
-                  trunits(1:5) .ne. 'kg/kg') then
+                   trunits(1:5) .ne. 'kg/kg' .and. &
+                   trunits(1:7) .ne. 'kg kg-1') then
                   write(6,*)'INIDAT: tracer units for tracer = ', &
                      cnst_name(m),' must be in KG/KG'
                   call endrun

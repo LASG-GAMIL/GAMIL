@@ -21,9 +21,9 @@ subroutine endrun(msg)
     character(*), intent(in), optional :: msg
 
     if (present(msg)) then
-        write(6, "('Notice: endrun: ', A)") msg
+        write(6, "('[Notice]: endrun: ', A)") msg
     else
-        write(6, "('Notice: endrun is being called.')")
+        write(6, "('[Notice]: endrun is being called.')")
     end if
 
     call shr_sys_flush(6) ! flush all output to standard output

@@ -97,7 +97,6 @@ subroutine bilin (arrin, xin, yin, nlondin, nlonin, &
       if (yin(j) >= yin(j+1)) icount = icount + 1
    end do
   
-   write(*,*) nlatout
    do j=1,nlatout-1
       if (yout(j) >= yout(j+1)) icount = icount + 1
    end do

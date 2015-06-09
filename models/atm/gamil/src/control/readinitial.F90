@@ -27,7 +27,6 @@ subroutine readinitial(ncid)
     use shr_kind_mod, only: r8 => shr_kind_r8
     use pmgrid
     use rgrid
-    use time_manager, only: ic_ymd, ic_tod
 #if ( defined SPMD )
     use mpishorthand
 #endif
@@ -44,8 +43,6 @@ subroutine readinitial(ncid)
     integer :: lonid            !------------------------------------------------------
     integer :: levid            ! 
     integer :: latid            ! 
-    integer :: ncdateid         ! Netcdf variable and dimension ids for variable of that
-    integer :: ncsecid          ! name with "id" tacked on to the end
     integer :: hyaiid           ! 
     integer :: hybiid           ! 
     integer :: hyamid           ! 
@@ -87,8 +84,6 @@ subroutine readinitial(ncid)
         call wrap_inq_dimid(ncid, 'slon' , slonid)
         call wrap_inq_dimid(ncid, 'slat' , slatid)
 #endif
-        call wrap_inq_varid(ncid, 'date'   , ncdateid)
-        call wrap_inq_varid(ncid, 'datesec', ncsecid)
         call wrap_inq_varid(ncid, 'hyai'   , hyaiid)
         call wrap_inq_varid(ncid, 'hybi'   , hybiid)
         call wrap_inq_varid(ncid, 'hyam'   , hyamid)
@@ -115,9 +110,6 @@ subroutine readinitial(ncid)
             write(6, "('  Dataset Parameters: mlev = ', I3, ' mlon = ', I3, ' morec = ', I3)") mlev, mlon, morec
             call endrun
         end if
-
-        call wrap_get_var_int(ncid, ncdateid, ic_ymd)
-        call wrap_get_var_int(ncid, ncsecid , ic_tod)
 
         call wrap_get_var_realx(ncid, hyamid, hyam)
         call wrap_get_var_realx(ncid, hybmid, hybm)
@@ -152,8 +144,6 @@ subroutine readinitial(ncid)
     call copy_phis_ghs(phis_tmp)
 
 #if ( defined SPMD )
-    call mpibcast (ic_ymd,  1,    mpiint, 0, mpicom)
-    call mpibcast (ic_tod,  1,    mpiint, 0, mpicom)
     call mpibcast (nlon,    plat, mpiint, 0, mpicom)
     !! call mpibcast (wnummax, plat, mpiint, 0, mpicom)
 

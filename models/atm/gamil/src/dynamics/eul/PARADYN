@@ -21,9 +21,9 @@
      _       ,NA
 
 #if (!defined SPMD)
-      PARAMETER(IM=128,NX=IM+2,NY=60,NL=26,NZ=NL+1)
+      PARAMETER(IM=180,NX=IM+2,NY=90,NL=26,NZ=NL+1)
 #else
-      PARAMETER(IM=128,NX=IM+2,NY=60/nprocessor+2,NL=26,NZ=NL+1)
+      PARAMETER(IM=180,NX=IM+2,NY=90/nprocessor+2,NL=26,NZ=NL+1)
 #endif
 
 !     Define the paramters about the earth and the atmosphere, required by

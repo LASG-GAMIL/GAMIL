@@ -127,11 +127,13 @@ module prescribed_aerosols
 !    on MATCH's levels (lev)
 !  AEROSOLc
 !
-  integer, parameter :: paerlev = 28           ! number of levels for aerosol fields (MUST = naerlev)
+  integer, parameter :: paerlev = 26           ! number of levels for aerosol fields (MUST = naerlev)
   integer naerlev                              ! size of level dimension in MATCH data
   integer :: naerlon
   integer :: naerlat
   integer :: date_aerosol(336)               ! Date on aerosol dataset (YYYYMMDD) for multi-years
+  real(r8) M_p0
+  real(r8), pointer :: M_hyai(:)
   real(r8), pointer :: M_hybi(:)                ! MATCH hybi
   real(r8), pointer :: M_ps(:,:)                  ! surface pressure from MATCH file
   real(r8), pointer :: AEROSOLc(:,:,:,:,:) ! Aerosol cumulative mass from MATCH
@@ -202,6 +204,8 @@ subroutine aerosol_initialize(phys_state)
 
    integer timesiz                      ! number of time samples (=12) in netcdf file
    integer latid                        ! netcdf id for latitude variable
+   integer Mp0
+   integer Mhyaiid                      ! netcdf id for MATCH hyai
    integer Mhybiid                      ! netcdf id for MATCH hybi
    integer timeid                       ! netcdf id for time variable
    !integer dimids(nf90_max_var_dims)    ! variable shape
@@ -354,47 +358,34 @@ subroutine aerosol_initialize(phys_state)
 !  write(6,*) "debug prescribed_aerosols.F90_line310"
 !  call endrun !! sxj--
 !
-   !if ( ierr==NF90_NOERR ) then
-   if ( ierr==NF_NOERR ) then
-      aerosol_datan%isncol=.true.
-      !call handle_ncerr(nf90_close(aernid),'prescribed_aerosols.F90', __LINE__)
-      call handle_ncerr(nf_close(aernid),'prescribed_aerosols.F90', __LINE__)
-      write(6,*) "debug prescribed_aerosols.F90_line318"
-      call endrun !! sxj-- 
-      call boundarydata_init(bndtvaer, phys_state, tmp_aero_name, naer, &
-                             aerosol_datan, 3)
+    if (ierr == NF_NOERR) then
+        aerosol_datan%isncol = .true.
+        call handle_ncerr(nf_close(aernid),'prescribed_aerosols.F90', __LINE__)
+        call endrun
+        call boundarydata_init(bndtvaer, phys_state, tmp_aero_name, naer, aerosol_datan, 3)
 
       aerosolc(:,1:paerlev,:,:,:)=aerosol_datan%fields
 
-      M_ps_cam_col=>aerosol_datan%ps
-      M_hybi=>aerosol_datan%hybi
+        M_ps_cam_col => aerosol_datan%ps
+        M_p0 = aerosol_datan%p0
+        M_hyai => aerosol_datan%hyai
+        M_hybi => aerosol_datan%hybi
 
    else 
 
       ! Allocate memory for dynamic arrays local to this module
-      allocate (M_ps_cam_col(pcols,begchunk:endchunk,2))
-      allocate (M_hybi(paerlev+1))
+      allocate(M_ps_cam_col(pcols,begchunk:endchunk,2))
+      allocate(M_hyai(paerlev+1))
+      allocate(M_hybi(paerlev+1))
       ! TBH:  HACK to avoid use of uninitialized values when ncols < pcols
       M_ps_cam_col(:,:,:) = 0._r8
 
-     ! write(*,*) "sxj ----paerlev:",paerlev
-      
       if (masterproc) then
 
          ! find and open file; abort if fail (getfil(,,0)).
 
          write(6,*)'aerosol_initialize: reading aerosol dataset....  If this seems to be taking too'
          write(6,*)'long, perhaps the dataset is being read from an nfs-mounted filesystem.'
-
-         ! First ensure dataset is CAM-ready
-
-        ! call handle_ncerr(nf90_inquire_attribute (aernid, nf90_global, 'cam-ready', attnum=attnum),&
-         !     'interpaerosols needs to be run to create a cam-ready aerosol dataset')
-              ! NF_INQ_ATTID (INTEGER NCID, INTEGER VARID,CHARACTER*(*) NAME, INTEGER attnum)
-
-        call handle_ncerr(nf_inq_attid (aernid, nf_global, 'cam-ready', attnum),&  !! sxj-- 
-              'interpaerosols needs to be run to create a cam-ready aerosol dataset')
-
 
          ! Get and check dimension info
 
@@ -430,42 +421,15 @@ subroutine aerosol_initialize(phys_state)
          !call handle_ncerr( nf90_inq_varid( aernid, 'date',   dateid ),&
          call handle_ncerr( nf_inq_varid( aernid, 'date',   dateid ),&  !! sxj no 'date'
               'prescribed_aerosols.F90', __LINE__)
-		 ! call handle_ncerr( nf90_inq_varid( aernid, 'datesec', secid ),&  !!sxj no 'datesec'
-         call handle_ncerr( nf_inq_varid( aernid, 'datesec', secid ),&
-              'prescribed_aerosols.F90', __LINE__)
-
 	timesize=timesiz  ! timesize belong to module "prescribed_aerosols"
-
-   ! write(6,*) 'lon', londimid, naerlon
-	!write(6,*) 'lev', levdimid, naerlev
-   ! write(6,*) 'time_sxj',  timeid, timesiz
-	!write(6,*) 'lat', latdimid, naerlat
-	!write(6,*) 'date', dateid
-	!write(6,*) 'datesec', secid
-   ! write(6,*) "debug prescribed_aerosols.F90",__LINE__
-    !call endrun !! sxj-- 
-
-
-
-
          do m = 1, naer
             aname=aerosol_name(m)
             ! rename because file has only one seasalt field
             if (aname=='MSSLTA_V') aname = 'MSSLT_V'
             if (aname=='MSSLTC_V') aname = 'MSSLT_V'
-            !call handle_ncerr( nf90_inq_varid( aernid, TRIM(aname), species_id(m)), &
 			call handle_ncerr( nf_inq_varid( aernid, TRIM(aname), species_id(m)), &
                'prescribed_aerosols.F90', __LINE__)
-         end do
-
-
-    !write(6,*) "get species_id(m)  "
-    !write(6,*) "debug prescribed_aerosols.F90",__LINE__
-    !call endrun !! sxj-- 
-
-         ! Check for reduced grid
-
-            !nlon_aer(:)   ---- number of lons per lat on bdy dataset
+        end do
          allocate (nlon_aer(naerlat))
          if (fullgrid) then
             !ret = nf90_inq_varid (aernid, 'nlon', nlonid)
@@ -533,7 +497,10 @@ subroutine aerosol_initialize(phys_state)
 
          ! use hybi,PS from MATCH
 
-         !call handle_ncerr( nf90_inq_varid( aernid, 'hybi', Mhybiid   ),&
+         call handle_ncerr(nf_inq_varid(aernid, 'P0', Mp0), &
+            'prescribed_aerosols.F90', __LINE__)
+		 call handle_ncerr( nf_inq_varid( aernid, 'hyai', Mhyaiid   ),&
+              'prescribed_aerosols.F90', __LINE__)
 		 call handle_ncerr( nf_inq_varid( aernid, 'hybi', Mhybiid   ),&
               'prescribed_aerosols.F90', __LINE__)
          !call handle_ncerr( nf90_inq_varid( aernid, 'PS', Mpsid   ),&
@@ -554,21 +521,11 @@ subroutine aerosol_initialize(phys_state)
             call endrun ()
          end if
 
-    !write(6,*) 'lon', londimid, naerlon
-    !write(6,*) 'lev', levdimid, naerlev
-    !write(6,*) 'time',  timeid, timesiz
-	!write(6,*) 'lat', latdimid, naerlat
-	!write(6,*)  dimids(1:4)
-    !write(6,*) "debug prescribed_aerosols.F90",__LINE__
-     !call endrun !! sxj-- 
-
     if (timesiz /= 12 .and. timesiz /= 216.and. timesiz /= 336) call endrun ('AEROSOL_timesiz: should be 12  216 336')
 
-         ! read in hybi from MATCH
-          !         NF_GET_VAR_DOUBLE (NCID, VARID, dval)
-         !call handle_ncerr( nf90_get_var (aernid, Mhybiid, M_hybi),&
-		  call handle_ncerr( NF_GET_VAR_DOUBLE(aernid, Mhybiid, M_hybi),&
-              'prescribed_aerosols.F90', __LINE__)
+        call handle_ncerr(nf_get_var_double(aernid, Mp0, M_p0), 'prescribed_aerosols.F90', __LINE__)
+        call handle_ncerr(NF_GET_VAR_DOUBLE(aernid, Mhyaiid, M_hyai), 'prescribed_aerosols.F90', __LINE__)
+        call handle_ncerr(NF_GET_VAR_DOUBLE(aernid, Mhybiid, M_hybi), 'prescribed_aerosols.F90', __LINE__)
 
          ! Retrieve date and sec variables.
          !call handle_ncerr( nf90_get_var (aernid, dateid, date_aer),&
@@ -579,57 +536,48 @@ subroutine aerosol_initialize(phys_state)
  	     ! write(6,*)  date_aer216 
          ! write(6,*) "debug prescribed_aerosols.F90",__LINE__
           !call endrun !! sxj-- 
-	   else
-	   
-	   if (timesiz==336) then
-              call handle_ncerr( nf_get_var_int (aernid, dateid, date_aer336),&
-              'prescribed_aerosols.F90', __LINE__)
-		!  write(6,*)  'date_aer336'
- 	     ! write(6,*)  "date_aer336", date_aer336
-	     ! write(6,*) "timesiz==336  prescribed_aerosols.F90",__LINE__
-              !call endrun !! sxj--  
-	   else
-	   
-               call handle_ncerr( nf_get_var_int (aernid, dateid, date_aer),&
-              'prescribed_aerosols.F90', __LINE__)
-           endif
+    else
+        if (timesiz==336) then
+            call handle_ncerr( nf_get_var_int (aernid, dateid, date_aer336),&
+                'prescribed_aerosols.F90', __LINE__)
+        else
+            call handle_ncerr( nf_get_var_int (aernid, dateid, date_aer),&
+                'prescribed_aerosols.F90', __LINE__)
+        end if
+    end if
 
-        endif
-			 
-         if (timesiz < 12) then
+    if (timesiz < 12) then
+        write(6,*)'AEROSOL READ: When cycling aerosols, dataset must have 12 consecutive ', &
+            'months of data starting with Jan'
+        write(6,*)'Current dataset has only ',timesiz,' months'
+        call endrun ()
+    end if
+
+    if (timesiz==12 ) date_aer336(1:12) =date_aer(1:12)
+    if (timesiz==216) date_aer336(1:216)=date_aer216(1:216)
+    do mo = 1,timesiz
+        mm=mod(mo,12)
+        if (mm.eq.0) mm=12
+        if (mod(date_aer336(mo),10000)/100 /= mm) then
             write(6,*)'AEROSOL READ: When cycling aerosols, dataset must have 12 consecutive ', &
-                 'months of data starting with Jan'
-            write(6,*)'Current dataset has only ',timesiz,' months'
+                'months of data starting with Jan'
+            write(6,*)'Month ',mm,' of dataset says date=',date_aer(mo)
             call endrun ()
-         end if
+        end if
+    end do
 
-      
-         if (timesiz==12 ) date_aer336(1:12) =date_aer(1:12)
-         if (timesiz==216) date_aer336(1:216)=date_aer216(1:216)
-         do mo = 1,timesiz
-              mm=mod(mo,12)
-              if (mm.eq.0) mm=12
-              if (mod(date_aer336(mo),10000)/100 /= mm) then
-               write(6,*)'AEROSOL READ: When cycling aerosols, dataset must have 12 consecutive ', &
-                    'months of data starting with Jan'
-               write(6,*)'Month ',mm,' of dataset says date=',date_aer(mo)
-               call endrun ()
-              end if
-         end do
-         !write(*,*) "momm"
-         !call endrun !! sxj--  
-
-         
-         if (single_column) then
-            naerlat=1
-            naerlon=1
-         endif
-         kount(:) = (/naerlon,naerlat,paerlev,1/)
+    if (single_column) then
+        naerlat=1
+        naerlon=1
+    end if
+    kount(:) = (/naerlon,naerlat,paerlev,1/)
       end if          ! masterproc
 
       ! broadcast hybi to nodes
 
 #if ( defined SPMD )
+    call mpibcast(M_p0, 1, mpir8, 0, mpicom)
+    call mpibcast(M_hyai, paerlev+1, mpir8, 0, mpicom)
       call mpibcast (M_hybi, paerlev+1, mpir8, 0, mpicom)
      !call mpibcast (kount,3 , mpiint, 0, mpicom)   ! 3
 	  call mpibcast (kount,4 , mpiint, 0, mpicom)   ! 3
@@ -1233,6 +1181,7 @@ subroutine vert_interpolate (Match_ps, pint, n, AEROSOL_mass, ncol, c)
    real(r8) dpl, dpu                   ! lower and upper intepolation factors
    real(r8) v_coord                    ! vertical coordinate
    real(r8) AER_diff                   ! temp var for difference between aerosol masses
+   real(r8) p1, p2
 
    call t_startf ('vert_interpolate')
 !
@@ -1266,58 +1215,63 @@ subroutine vert_interpolate (Match_ps, pint, n, AEROSOL_mass, ncol, c)
 !
 
 
-      lev_interp_comp = .false.
-      do kk=kkstart,paerlev
-         if(.not.lev_interp_comp) then
-           do i=1,ncol
-            v_coord = pint(i,k)
-            if (M_hybi(kk)*Match_ps(i) .lt. v_coord .and. v_coord .le. M_hybi(kk+1)*Match_ps(i)) then
-               kupper(i) = kk
-               kount = kount + 1
-            end if
-            end do
+        lev_interp_comp = .false.
+        do kk = kkstart, paerlev
+            if(.not. lev_interp_comp) then
+                do i = 1, ncol
+                    v_coord = pint(i,k)
+                    p1 = M_hyai(kk)*M_p0+M_hybi(kk)*Match_ps(i)
+                    p2 = M_hyai(kk+1)*M_p0+M_hybi(kk+1)*Match_ps(i)
+                    if (p1 .lt. v_coord .and. v_coord .le. p2) then
+                        kupper(i) = kk
+                        kount = kount+1
+                    end if
+                end do
 !
 ! If all indices for this level have been found, do the interpolation and
 ! go to the next level
 !
 ! Interpolate in pressure.
 !
-           if (kount.eq.ncol) then
-            do m=1,naer
-               do i=1,ncol
-                  dpu = pint(i,k) - M_hybi(kupper(i))*Match_ps(i)
-                  dpl = M_hybi(kupper(i)+1)*Match_ps(i) - pint(i,k)
-                  AEROSOL(i,k,m) = &
-                     (AEROSOLc(i,kupper(i)  ,c,m,n)*dpl + &
-                     AEROSOLc(i,kupper(i)+1,c,m,n)*dpu)/(dpl + dpu)
-               enddo !i
-            end do
-            lev_interp_comp = .true.
+                if (kount .eq. ncol) then
+                    do m = 1, naer
+                        do i = 1, ncol
+                            p1 = M_hyai(kupper(i))*M_p0+M_hybi(kupper(i))*Match_ps(i)
+                            p2 = M_hyai(kupper(i)+1)*M_p0+M_hybi(kupper(i)+1)*Match_ps(i)
+                            dpu = pint(i,k)-p1
+                            dpl = p2-pint(i,k)
+                            AEROSOL(i,k,m) = &
+                                (AEROSOLc(i,kupper(i)  ,c,m,n)*dpl + &
+                                 AEROSOLc(i,kupper(i)+1,c,m,n)*dpu)/(dpl+dpu)
+                        end do
+                    end do
+                    lev_interp_comp = .true.
+                end if
             end if
-         end if
-      end do
+        end do
 !
 ! If we've fallen through the kk=1,levsiz-1 loop, we cannot interpolate and
 ! must extrapolate from the bottom or top pressure level for at least some
 ! of the longitude points.
 !
-
-      if(.not.lev_interp_comp) then
-         do m=1,naer
-            do i=1,ncol
-               if (pint(i,k) .lt. M_hybi(1)*Match_ps(i)) then
-                  AEROSOL(i,k,m) =  AEROSOLc(i,1,c,m,n)
-               else if (pint(i,k) .gt. M_hybi(paerlev+1)*Match_ps(i)) then
-                  AEROSOL(i,k,m) = 0.0_r8
-               else
-                  dpu = pint(i,k) - M_hybi(kupper(i))*Match_ps(i)
-                  dpl = M_hybi(kupper(i)+1)*Match_ps(i) - pint(i,k)
-                  AEROSOL(i,k,m) = &
-                     (AEROSOLc(i,kupper(i)  ,c,m,n)*dpl + &
-                     AEROSOLc(i,kupper(i)+1,c,m,n)*dpu)/(dpl + dpu)
-               end if
+        if (.not. lev_interp_comp) then
+            do m = 1, naer
+                do i = 1, ncol
+                    p1 = M_hyai(1)*M_p0+M_hybi(1)*Match_ps(i)
+                    p2 = M_hyai(paerlev+1)*M_p0+M_hybi(paerlev+1)*Match_ps(i)
+                    if (pint(i,k) .lt. p1) then
+                        AEROSOL(i,k,m) = AEROSOLc(i,1,c,m,n)
+                    else if (pint(i,k) .gt. p2) then
+                        AEROSOL(i,k,m) = 0.0_r8
+                    else
+                        dpu = pint(i,k)-M_hyai(kupper(i))*M_p0-M_hybi(kupper(i))*Match_ps(i)
+                        dpl = M_hyai(kupper(i)+1)*M_p0+M_hybi(kupper(i)+1)*Match_ps(i)-pint(i,k)
+                        AEROSOL(i,k,m) = &
+                            (AEROSOLc(i,kupper(i)  ,c,m,n)*dpl + &
+                             AEROSOLc(i,kupper(i)+1,c,m,n)*dpu)/(dpl + dpu)
+                    end if
+                end do
             end do
-         end do
 
          if (kount.gt.ncol) then
             call endrun ('VERT_INTERPOLATE: Bad data: non-monotonicity suspected in dependent variable')

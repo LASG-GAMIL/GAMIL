@@ -144,7 +144,7 @@ OBJS      := $(addsuffix .o, $(basename $(SOURCES)))
 CPPDEF    := -DCAM -DNO_SHR_VMATH -DHIDE_SHR_MSG
 
 $(MODEL_EXEDIR)/$(EXENAME): $(OBJS)
-	$(FC) -o $@ $(OBJS) -L$(LIB_NETCDF) -lnetcdf -L$(ESMF_LIB)/$(ESMF_ARCH) -lesmf
+	$(FC) -o $@ $(OBJS) -L$(LIB_NETCDF) -lnetcdf -lnetcdff -L$(ESMF_LIB)/$(ESMF_ARCH) -lesmf
 
 debug: $(OBJS)
 	echo "FFLAGS: $(FFLAGS)"
@@ -154,7 +154,7 @@ debug: $(OBJS)
 test_fc: test_fc.o
 	$(FC) -o $@ test_fc.o $(LDFLAGS)
 test_nc: test_nc.o
-	$(FC) -o $@ test_nc.o -L$(LIB_NETCDF) -lnetcdf $(LDFLAGS)
+	$(FC) -o $@ test_nc.o -L$(LIB_NETCDF) -lnetcdf -lnetcdff $(LDFLAGS)
 test_mpi: test_mpi.o
 	$(FC) -o $@ test_mpi.o $(LDFLAGS)
 
