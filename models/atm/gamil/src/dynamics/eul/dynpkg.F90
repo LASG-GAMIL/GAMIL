@@ -105,10 +105,8 @@
 
    call t_startf('hdifus')
 
-!!   write(6,*) 'calling hdifus.....'
-
-!! if (.not.aqua_planet)  then
-   if ((.not.aqua_planet).and.(.not.adiabatic))  then
+   if (.not.aqua_planet)  then
+   !if ((.not.aqua_planet).and.(.not.adiabatic))  then
 
       DO K=1,plev
         DO J=beglatexdyn+numbnd,endlatexdyn-numbnd
@@ -139,7 +137,6 @@
       END DO
 
    else
-      write(*,*) 'no hdiffus'
       su(:,:,:) = 0.0
       sv(:,:,:) = 0.0
       st(:,:,:) = 0.0
