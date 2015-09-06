@@ -19,6 +19,7 @@ subroutine spmdinit
                            mpi_packed, mpi_comm_world
    use spmd_dyn, only:  npes, spmdinit_dyn
    use spmd_phys, only: spmdinit_phys
+   use mpi_gamil, only: gamil_comm_init
 #endif
    use pmgrid, only: plat, masterproc, iam
 
@@ -99,12 +100,12 @@ subroutine spmdinit
       call mpisend (proc_name(iam), mpi_max_processor_name, mpichar, 0, 1, mpicom)
    end if
 
-   call set_mpi_params()
 !
 ! Currently spmdinit_dyn must be called before spmdinit_phys because the latter just copies
 ! in data computed in the former
 !
-   call spmdinit_dyn ()
+   call gamil_comm_init()
+   call spmdinit_dyn (npes)
    call spmdinit_phys ()
    deallocate(length)
    deallocate(proc_name)

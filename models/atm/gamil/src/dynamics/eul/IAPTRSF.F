@@ -3,22 +3,12 @@
 
       SUBROUTINE IAPTRSF(US,VS,WS,PS,TS,U,V,P,TT,TB,CB,KP)
 !
-#if ( defined SPMD )
-      use mpishorthand, only: mpicom
-#endif
+      use pmgrid, only: beglatexdyn,endlatexdyn, plat
+      use mpi_gamil
 
       IMPLICIT NONE
 
 #include <PARADYN>
-
-#if (defined SPMD)
-#include <mpif.h>
-#include <commpi.h>
-
-      integer   isend, irecv
-      integer   istatus(mpi_status_size)
-      character*50 filename
-#endif
 
 !
 !     The file PARA is to define the parameters related to the model resolution:
@@ -27,87 +17,60 @@
 !     NL is the number of vertical layers
 !
 	REAL*8
-     _	     US(NX,NY,NL )  !  US = u, zonal wind,    input variable
-     _      ,VS(NX,NY,NL )  !  VS = v, meridional wind, input variable
-     _      ,WS(NX,NY,NZ )  !  vertical velocity, input variable
-     _      ,PS (NX,NY   )  !  Surface pressure, input variable
-     _      ,TS (NX,NY,NL)  !  TS = T, temperature, input variable
-     _      ,TB (NX,NY,NL)  !  the temperature of the standard atmosphere a
+     _	     US(beglonex:endlonex,beglatexdyn:endlatexdyn,NL )  !  US = U, zonal wind,    input variable
+     _      ,VS(beglonex:endlonex,beglatexdyn:endlatexdyn,NL )  !  VS = V, meridional wind, input variable
+     _      ,WS(beglonex:endlonex,beglatexdyn:endlatexdyn,NZ )  !  vertical velocity, input variable
+     _      ,PS(beglonex:endlonex,beglatexdyn:endlatexdyn)  !  Surface pressure, input variable
+     _      ,TS(beglonex:endlonex,beglatexdyn:endlatexdyn,NL)  !  temperature, input variable
+     _      ,TB(beglonex:endlonex,beglatexdyn:endlatexdyn,NL)  !  the temperature of the standard atmosphere a
 !                           !  at the sigma layers, input constant
-     _      ,CB (NX,NY,NL)  !  CB=Sqrt(R*(KK*TBB-dTB/dlnp)), input variable,
+     _      ,CB (beglonex:endlonex,beglatexdyn:endlatexdyn,NL)  !  CB=Sqrt(R*(KK*TBB-dTB/dlnp)), input variable,
 !                           !  where, KK=R/Cp, R is a constant
-     _      ,U  (NX,NY,NL)  !  U=u*sqrt(Ps), output variable
-     _      ,V  (NX,NY,NL)  !	 V=v*sqrt(Ps), output variable
-     _      ,P  (NX,NY   )  !  P=sqrt(Ps)  , output variable
-     _      ,TT (NX,NY,NL)  !  TT=R*T'*Sqrt(Ps)/CB, output variable
+     _      ,U  (beglonex:endlonex,beglatexdyn:endlatexdyn,NL)  !  U=U*sqrt(PS), output variable
+     _      ,V  (beglonex:endlonex,beglatexdyn:endlatexdyn,NL)  !	 V=V*sqrt(PS), output variable
+     _      ,P  (beglonex:endlonex,beglatexdyn:endlatexdyn   )  !  P=sqrt(PS)  , output variable
+     _      ,TT (beglonex:endlonex,beglatexdyn:endlatexdyn,NL)  !  TT=R*T'*Sqrt(PS)/CB, output variable
 !                           !  where T'=T-TB, T is the temperatur,
      _      ,PX,PY          !  working variables
 !
 	INTEGER I,J,K,KP
-        integer begj,endj
 
-#if (defined SPMD)
-      begj = 2
-      endj = ny-1
-#else
-      begj = 1
-      endj = ny
-#endif
 
-	IF (KP.EQ.1) THEN
-!
-        DO J=begj,endj
-	  DO I=2,NX-1
+!$OMP PARALLEL DO PRIVATE (I, J)
+        DO J=jbeg0,jend0
+	  DO I=ibeg1,iend1
 	     P(I,J)=SQRT(PS(I,J))
 	  END DO
-	  PS (1 ,J) = PS (NX-1,J)
-	  PS (NX,J) = PS (2   ,J)
-!
-	  P  (1 ,J) = P  (NX-1,J)
-	  P  (NX,J) = P  (2   ,J)
         END DO
 
-#if (defined SPMD)
-      call mpi_isend( p(1,2), nx, mpi_double_precision, itop, 1, mpicom, isend, ierr)
-      call mpi_irecv( p(1,ny),nx, mpi_double_precision, ibot, 1, mpicom, irecv, ierr)
-#endif
-!
+      call gamil_arrays_comm(COMM_TO_LEFT,1,p(:,beglatexdyn),PS(:,beglatexdyn))
+      call gamil_arrays_comm(COMM_TO_RIGHT,1,p(:,beglatexdyn),PS(:,beglatexdyn))
+      call gamil_arrays_comm(COMM_TO_TOP,1,p(:,beglatexdyn))
 
-        DO J=begj,endj
-	  DO I=2,NX-1
+
+      IF (KP.EQ.1) THEN
+
+!$OMP PARALLEL DO PRIVATE (I, J)
+        DO J=jbeg0,jend0
+	  DO I=beglonex,endlonex
              WS(I,J,1)=0.0D0
              WS(I,J,NZ)=0.0D0
 	  END DO
-	  WS(1 ,J,1) = WS(NX-1,J, 1)
-	  WS(NX,J,1) = WS(2   ,J, 1)
-	  WS(1,J,NZ) = WS(NX-1,J,NZ)
-	  WS(NX,J,NZ)= WS(2   ,J,NZ)
 	END DO
+      ENDIF
+        
 
-#if (defined SPMD)
-      call mpi_wait(isend,istatus,ierr)
-      call mpi_wait(irecv,istatus,ierr)
-#endif
-
-!
-      DO J=begj,endj
-        DO I=2,NX-1
+!$OMP PARALLEL DO PRIVATE (I, J, K, PY, PX)
+      DO J=jbeg0,jend0
+        DO I=ibeg1,iend1
 !
 !         CALCULATING THE AVERAGE VALUE OF P AT V-GRID.
 !
-#if (!defined SPMD)
-          IF(J.LT.NY) THEN
+          IF(J.LT.PLAT) THEN
             PY=0.5D0*(P(I,J)+P(I,J+1))
           ELSE
             PY=0.0D0
           ENDIF
-#else
-         if ((myrank.eq.0).and.(j.eq.endj)) then
-            PY=0.0D0
-         else
-            PY=0.5D0*(P(I,J)+P(I,J+1))
-         endif
-#endif
 !
 !         CALCULATING THE AVERAGE VALUE OF P AT U-GRID.
 !
@@ -118,154 +81,18 @@
              U (I,J,K)=PX*US(I,J,K)
              V (I,J,K)=PY*VS(I,J,K)
 !
-!         CALCULATING TT=(TS-TB)*P*RD/CB.
+!         CALCULATING TT=(T-TB)*P*RD/CB.
 !
 	     TT (I,J,K)=(TS(I,J,K)-TB(I,J,K))*P(I,J)*RD/CB(I,J,K)
 !
           ENDDO
         ENDDO
-!
-	  DO K=1,NL
-!
-	    US (1 ,J,K) = US (NX-1,J,K)
-	    US (NX,J,K) = US (2   ,J,K)
-!
-	    VS (1 ,J,K) = VS (NX-1,J,K)
-	    VS (NX,J,K) = VS (2   ,J,K)
-!
-	    TS (1 ,J,K) = TS (NX-1,J,K)
-	    TS (NX,J,K) = TS (2   ,J,K)
-!
-	    U  (1 ,J,K) = U  (NX-1,J,K)
-	    U  (NX,J,K) = U  (2   ,J,K)
-!
-	    V  (1 ,J,K) = V  (NX-1,J,K)
-	    V  (NX,J,K) = V  (2   ,J,K)
-!
-	    TT (1 ,J,K) = TT (NX-1,J,K)
-	    TT (NX,J,K) = TT (2   ,J,K)
-!
-	  END DO
       ENDDO
-!
-	ELSE
-!
-        DO J=begj,endj
-	  DO I=2,NX-1
-	     P(I,J)=SQRT(PS(I,J))
-	  END DO
-!
-	  PS (1 ,J) = PS (NX-1,J)
-	  PS (NX,J) = PS (2   ,J)
-!
-	  P  (1 ,J) = P  (NX-1,J)
-	  P  (NX,J) = P  (2   ,J)
-!
-	END DO
 
-#if (defined SPMD)
-      call mpi_isend( p(1,2), nx, mpi_double_precision, itop, 1, mpicom, isend, ierr)
-      call mpi_irecv( p(1,ny),nx, mpi_double_precision, ibot, 1, mpicom, irecv, ierr)
-      call mpi_wait(isend,istatus,ierr)
-      call mpi_wait(irecv,istatus,ierr)
-#endif
-
-!
-      DO J=begj,endj
-        DO I=2,NX-1
-!
-!         CALCULATING THE AVERAGE VALUE OF P AT V-GRID.
-!
-#if (!defined SPMD)
-          IF(J.LT.NY) THEN
-            PY=0.5D0*(P(I,J)+P(I,J+1))
-          ELSE
-            PY=0.0D0
-          ENDIF
-#else
-         if ((myrank.eq.0).and.(j.eq.endj)) then
-            PY=0.0D0
-         else
-            PY=0.5D0*(P(I,J)+P(I,J+1))
-         endif
-#endif
-!
-!         CALCULATING THE AVERAGE VALUE OF P AT U-GRID.
-!
-          PX=0.5D0*(P(I,J)+P(I-1,J))
-!
-          DO K=1,NL
-!
-          U (I,J,K)=PX*US(I,J,K)
-          V (I,J,K)=PY*VS(I,J,K)
-!
-!         CALCULATING TT=(TS-TB)*P*RD/CB.
-!
-	    TT (I,J,K)=(TS(I,J,K)-TB(I,J,K))*P(I,J)*RD/CB(I,J,K)
-!
-          ENDDO
-        ENDDO
-!
-	  DO K=1,NL
-!
-	    US (1 ,J,K) = US (NX-1,J,K)
-	    US (NX,J,K) = US (2   ,J,K)
-!
-	    VS (1 ,J,K) = VS (NX-1,J,K)
-	    VS (NX,J,K) = VS (2   ,J,K)
-!
-	    TS (1 ,J,K) = TS (NX-1,J,K)
-	    TS (NX,J,K) = TS (2   ,J,K)
-!
-	    U  (1 ,J,K) = U  (NX-1,J,K)
-	    U  (NX,J,K) = U  (2   ,J,K)
-!
-	    V  (1 ,J,K) = V  (NX-1,J,K)
-	    V  (NX,J,K) = V  (2   ,J,K)
-!
-	    TT (1 ,J,K) = TT (NX-1,J,K)
-	    TT (NX,J,K) = TT (2   ,J,K)
-!
-	  END DO
-      ENDDO
-!
-	END IF
-!- check ---------------------------------------------------------
-!
-!#if (defined SPMD)
-!      write(filename,14) 'iaptrsf-p-',myrank,'.out'
-!14    format(a10,i1,a4)
-!      open (10,file=trim(filename))
-!#else
-!      open (10,file='iaptrsf-s.out')
-!#endif
-!
-!      write(10,*) '------------------- u -----------------'
-!      write(10,11) (j,(u(i,j,10),i=1,2),j=1,ny)
-!
-!      write(10,*) '------------------- v -----------------'
-!      write(10,11) (j,(v(i,j,10),i=1,2),j=1,ny)
-!
-!      write(10,*) '------------------- tt -----------------'
-!      write(10,11) (j,(tt(i,j,10),i=1,2),j=1,ny)
-!
-!      write(10,*) '------------------- p -----------------'
-!      write(10,11) (j,(p(i,j),i=1,2),j=1,ny)
-!
-!      write(10,*) '------------------- pps -----------------'
-!      write(10,11) (j,(pps(i,j),i=1,2),j=1,ny)
-!
-!11    format(1x,i5,2e30.20)
-!
-!
-!      close (10)
-!
-!#if (defined SPMD)
-!!      call mpi_finalize(j)
-!#endif
-!!      stop 'iaptrsf'
-!
-!!-----------------------------------------------------------------
+      call gamil_arrays_comm(COMM_TO_LEFT,1,US(:,beglatexdyn,1),VS(:,beglatexdyn,1),
+     &                       TS(:,beglatexdyn,1),U(:,beglatexdyn,1),V(:,beglatexdyn,1),TT(:,beglatexdyn,1))
+      call gamil_arrays_comm(COMM_TO_RIGHT,1,US(:,beglatexdyn,1),VS(:,beglatexdyn,1),
+     &                       TS(:,beglatexdyn,1),U(:,beglatexdyn,1),V(:,beglatexdyn,1),TT(:,beglatexdyn,1))
 
 !
 	RETURN

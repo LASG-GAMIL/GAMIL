@@ -29,6 +29,7 @@ program gamil
     use comsrf,       only: fld_kvh ! added by LIU Li
 #if (defined SPMD || defined COUP_CSM)
     use mpishorthand, only: mpicom, nsend, nrecv, nwsend, nwrecv
+    use mpi_gamil
 #endif
 
 #ifdef COUP_CSM
@@ -136,6 +137,7 @@ program gamil
     !
     call preset
     call parse_namelist
+    call gamil_2D_decomp()
     !
     ! Define fortran unit numbers
     !

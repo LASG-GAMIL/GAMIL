@@ -5,20 +5,22 @@ C     =======================
       SUBROUTINE TSPASW(Q,W,DTDSG)
 C     =======================
 C
+      use pmgrid, only: beglatexdyn,endlatexdyn, plat
+      use mpi_gamil
+      
       IMPLICIT NONE
 
 #include <PARADYN>
 #include <PARADD>
 
-#if (defined SPMD)
-#include <commpi.h>
-#endif
 C
-      REAL*8 Q(NX,NY,NL),W(NX,NY,NL)
-      REAL*8 QWMIN(NX,NY,NL),QWMAX(NX,NY,NL)
+      REAL*8 Q(beglonex:endlonex,beglatexdyn:endlatexdyn,NL)
+      REAL*8 W(beglonex:endlonex,beglatexdyn:endlatexdyn,NL)
+      REAL*8 QWMIN,QWMAX
 !
       REAL*8 WW(NL),FW(NZ),BETAW(NL),QW(NL),QWSTAR(NL)
      _      ,WSTAR(NL),AW(NL),HS(NL),HW(NL),DTDSG(NL)
+      REAL*8 north_pole_q_nx(NL), south_pole_q_1(NL)
 !
       REAL*8 GAMA,CWSTAR,CW,TEMP1,TEMP2,TEMP3,TEMP4
 !
@@ -28,25 +30,6 @@ C
 *    $     1.0E-6/
       INTEGER I,J,K,IS,IT
       integer begj,endj
-
-#if (defined SPMD)
-      character*50 filename
-
-      begj=2
-      endj=ny-1
-#else
-      begj=1
-      endj=ny
-#endif
-!
-       DO I=1,NX
-       DO J=begj,endj
-       DO K=1,NL
-          QWMIN(I,J,K)=1.0E15
-          QWMAX(I,J,K)=-1.0E15
-       ENDDO
-       ENDDO
-       ENDDO
 !
       DO K=1,NL
 	HS(K)=1.0D0/DTDSG(K)
@@ -56,33 +39,29 @@ C
 	HW(K)=HALF*(HS(K)+HS(K-1))
       ENDDO
 C
-      DO J=begj,endj
 
-#if (defined SPMF)
-!     (IF(J.EQ.1) THEN)
-      if (myrank.eq.nprocs-1.and.j.eq.jpole) then
-	IS=NX
-	IT=NX
-!     (ELSE IF(J.EQ.NY) THEN)
-      else if (myrank.eq.0.and.j.eq.jpole) then
-	IS=1
-	IT=1
-      ELSE
-	IS=1
-	IT=NX
-      ENDIF
-#else
+!$OMP PARALLEL DO PRIVATE (I,J,K,IS,IT,QW,WW,FW,GAMA,BETAW,QWSTAR,
+!$   &                                       QWMIN,QWMAX,AW,TEMP1,TEMP2,TEMP3,TEMP4,
+!$   &                                       CWSTAR,CW,WSTAR)
+      DO J=jbeg0,jend0
+
+      IS = NX
+      IT = -1
       IF(J.EQ.1) THEN
-	IS=NX
-	IT=NX
-      ELSE IF(J.EQ.NY) THEN
-	IS=1
-	IT=1
+        IF (endlonex .eq. NX) THEN
+	      IS=NX
+	      IT=NX
+        ENDIF
+      ELSE IF(J.EQ.PLAT) THEN
+        IF (beglonex .eq. 1) THEN
+	      IS=1
+	      IT=1
+        ENDIF
       ELSE
-	IS=1
-	IT=NX
+	    IS=beglonex
+	    IT=endlonex
       ENDIF
-#endif
+
 C
       DO I=IS,IT
 C
@@ -108,18 +87,20 @@ C
       QWSTAR(NL)=QW(NL)+BETAW(NM)*FW(NL)*DTDSG(NL)
 C
       DO K=1,NL
+       QWMIN=1.0E15
+       QWMAX=-1.0E15
 	IF(K.EQ.1) THEN
-	  QWMIN(I,J,K)=MIN(QW(K),QW(K+1),QWMIN(I,J,K))
-	  QWMAX(I,J,K)=MAX(QW(K),QW(K+1),QWMAX(I,J,K))
+	  QWMIN=MIN(QW(K),QW(K+1),QWMIN)
+	  QWMAX=MAX(QW(K),QW(K+1),QWMAX)
 CCCC	ELSE IF(J.EQ.NL) THEN
 	ELSE IF(K.EQ.NL) THEN
-	  QWMIN(I,J,K)=MIN(QW(K),QW(K-1),QWMIN(I,J,K))
-	  QWMAX(I,J,K)=MAX(QW(K),QW(K-1),QWMAX(I,J,K))
+	  QWMIN=MIN(QW(K),QW(K-1),QWMIN)
+	  QWMAX=MAX(QW(K),QW(K-1),QWMAX)
 	ELSE
-          QWMIN(I,J,K)=MIN(QW(K),QW(K-1),QW(K+1),QWMIN(I,J,K))
-	  QWMAX(I,J,K)=MAX(QW(K),QW(K-1),QW(K+1),QWMAX(I,J,K))
+          QWMIN=MIN(QW(K),QW(K-1),QW(K+1),QWMIN)
+	  QWMAX=MAX(QW(K),QW(K-1),QW(K+1),QWMAX)
 	ENDIF
-	  AW(K)=(QWSTAR(K)-QWMIN(I,J,K))*(QWSTAR(K)-QWMAX(I,J,K))
+	  AW(K)=(QWSTAR(K)-QWMIN)*(QWSTAR(K)-QWMAX)
       ENDDO
 C
       DO K=2,NL
@@ -150,68 +131,44 @@ C
 C
       ENDDO
 
-#if (defined SPMD)
 
-!      IF(J.EQ.1) THEN
-      if (myrank.eq.nprocs-1.and.j.eq.jpole) then
+      IF(J.EQ.1 .and. endlonex .EQ. NX) THEN
         DO K = 1 ,NL
-          DO I = 1 ,NX
-            Q(I,J,K)= Q(NX,J,K)
-          ENDDO
-        ENDDO
-!      ELSE IF(J.EQ.NY) THEN
-      else if (myrank.eq.0.and.j.eq.jpole) then
-        DO K = 1 ,NL
-          DO I = 1 ,NX
-            Q(I,J,K)= Q(1,J,K)
-          ENDDO
+          north_pole_q_nx(K)= Q(NX,J,K)
         ENDDO
       ENDIF
-#else
 
-      IF(J.EQ.1) THEN
+      IF(J.EQ.PLAT .and. beglonex .EQ. 1) THEN
         DO K = 1 ,NL
-          DO I = 1 ,NX
-            Q(I,J,K)= Q(NX,J,K)
-          ENDDO
-        ENDDO
-      ELSE IF(J.EQ.NY) THEN
-        DO K = 1 ,NL
-          DO I = 1 ,NX
-            Q(I,J,K)= Q(1,J,K)
-          ENDDO
+          south_pole_q_1(K)= Q(1,J,K)
         ENDDO
       ENDIF
-#endif
 C
       ENDDO
 
+      call broadcast_lon_data(nx,1,north_pole_q_nx,nl)
+      call broadcast_lon_data(1,plat,south_pole_q_1,nl)
 
-!- check ---------------------------------------------------------
-!#if (defined SPMD)
-!
-!      write(filename,14) 'tspasw-p-',myrank,'.out'
-!14    format(a9,i1,a4)
-!
-!      open (10,file=trim(filename))
-!
-!#else
-!      open (10,file='tspasw-s.out')
-!#endif
-!
-!      write(10,*) 'qqqqqqqq--------------tspasw'
-!      do j=1,ny
-!        write(10,11) j,q(1,j,10),q(2,j,10)
-!      enddo
-!
-!11    format(1x,i5,2e30.20)
-!      close (10)
-!
-!#if (defined SPMD)
-!      call mpi_finalize(j)
-!#endif
-!      stop'tspasw'
-!--------------------------------------------------------------
+      IF(jbeg0.EQ.1) THEN
+        J = 1
+!$OMP PARALLEL DO PRIVATE (I,K)
+        DO K = 1 ,NL
+          DO I = beglonex ,endlonex
+            Q(I,J,K)= north_pole_q_nx(K)
+          ENDDO
+        ENDDO
+      ENDIF
+
+      IF(jend0.EQ.PLAT) THEN
+        J = jend0
+!$OMP PARALLEL DO PRIVATE (I,K)
+        DO K = 1 ,NL
+          DO I = beglonex ,endlonex
+            Q(I,J,K)= south_pole_q_1(K)
+          ENDDO
+        ENDDO
+      ENDIF
+
 
       RETURN
       END

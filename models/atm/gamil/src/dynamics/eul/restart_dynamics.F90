@@ -19,6 +19,7 @@ module restart_dynamics
 CONTAINS
 
    subroutine write_restart_dynamics (nrg)
+      use mpi_gamil
 
 !!#include <comqfl.h>
 
@@ -26,87 +27,163 @@ CONTAINS
 
       integer begj    ! starting latitude
       integer ioerr   ! error status
+      real(r8) :: local_3d_array(beglonex:endlonex,beglatexdyn:endlatexdyn,plev+2)
+      integer :: i,jdyn,jcam,k,m
 
       begj = beglatex+numbnd
 !
 ! prognostics of cam2
 !
-      call wrtout_r8(nrg, phis, plond)
-      call wrtout_r8(nrg, omga, plndlv)
 
-      call wrtout_r8(nrg, u3(1,1,begj,n3m2), plndlv)
-      call wrtout_r8(nrg, v3(1,1,begj,n3m2), plndlv)
+      do jdyn = jbeg0,jend0
+        jcam = plat + 1 - jdyn
+        do i=beglonex,endlonex
+          local_3d_array(i,jdyn,1) = phis(i,jcam)
+        enddo
+      enddo
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,1,local_3d_array)
+ 
+      do k=1, plev
+      do jdyn = jbeg0,jend0
+        jcam = plat + 1 - jdyn
+        do i=beglonex,endlonex
+          local_3d_array(i,jdyn,k) = omga(i,k,jcam)
+        enddo
+      enddo
+      enddo
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,local_3d_array)
+ 
+      do k=1, plev
+      do jdyn = jbeg0,jend0
+        jcam = plat + 1 - jdyn
+        do i=beglonex,endlonex
+          local_3d_array(i,jdyn,k) = u3(i,k,jcam,n3m2)
+        enddo
+      enddo
+      enddo
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,local_3d_array)
 
-      call wrtout_r8(nrg, t3(1,1,begj,n3m2), plndlv)
-      call wrtout_r8(nrg, q3(1,1,1,begj,n3m2), plndlv*(pcnst+pnats))
-      call wrtout_r8(nrg, t31(1,1,begj), plndlv)
-      call wrtout_r8(nrg, q31(1,1,begj), plndlv)
+      do k=1, plev
+      do jdyn = jbeg0,jend0
+        jcam = plat + 1 - jdyn
+        do i=beglonex,endlonex
+          local_3d_array(i,jdyn,k) = v3(i,k,jcam,n3m2)
+        enddo
+      enddo
+      enddo
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,local_3d_array)
 
-      call wrtout_r8(nrg, ps(1,beglat,n3m2), plond)
-!
+      do k=1, plev
+      do jdyn = jbeg0,jend0
+        jcam = plat + 1 - jdyn
+        do i=beglonex,endlonex
+          local_3d_array(i,jdyn,k) = t3(i,k,jcam,n3m2)
+        enddo
+      enddo
+      enddo
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,local_3d_array)
+
+      do m=1,pcnst+pnats
+      do k=1, plev
+      do jdyn = jbeg0,jend0
+        jcam = plat + 1 - jdyn
+        do i=beglonex,endlonex
+          local_3d_array(i,jdyn,k) = q3(i,k,m,jcam,n3m2)
+        enddo
+      enddo
+      enddo
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,local_3d_array)
+      enddo
+
+      do k=1, plev
+      do jdyn = jbeg0,jend0
+        jcam = plat + 1 - jdyn
+        do i=beglonex,endlonex
+          local_3d_array(i,jdyn,k) = t31(i,k,jcam)
+        enddo
+      enddo
+      enddo
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,local_3d_array)
+
+      do k=1, plev
+      do jdyn = jbeg0,jend0
+        jcam = plat + 1 - jdyn
+        do i=beglonex,endlonex
+          local_3d_array(i,jdyn,k) = q31(i,k,jcam)
+        enddo
+      enddo
+      enddo
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,local_3d_array)
+
+      do jdyn = jbeg0,jend0
+        jcam = plat + 1 - jdyn
+        do i=beglonex,endlonex
+          local_3d_array(i,jdyn,1) = ps(i,jcam,n3m2)
+        enddo
+      enddo
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,1,local_3d_array)
+
 ! 'prognostics' of fm2003 : u,v,t,q,wpa,pes,ghs (from module comfm1)
 !
 !!(wh 2003.10.18)
 
-      call wrtout_r8_dyn(nrg, u, plond, numlatsex, plev)
-      call wrtout_r8_dyn(nrg, v, plond, numlatsex, plev)
-      call wrtout_r8_dyn(nrg, t, plond, numlatsex, plev)
-      call wrtout_r8_dyn(nrg, q, plond, numlatsex, plev)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,u)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,v)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,t)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,q)
 
-      call wrtout_r8_dyn (nrg,ws  ,plond,numlatsex, plevp)
-      call wrtout_r8_dyn (nrg,wpa ,plond,numlatsex, plev)
-      call wrtout_r8_dyn (nrg,ghi ,plond,numlatsex, plevp)
-      call wrtout_r8_dyn (nrg,pes ,plond,numlatsex, 1)
-      call wrtout_r8_dyn (nrg,ghs ,plond,numlatsex, 1)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plevp,ws)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,wpa)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plevp,ghi)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,1,pes)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,1,ghs)
+
 !
 !  tendencies of fm2003 : su,sv,st  (sq will always be 0.0)
 !
-      call wrtout_r8_dyn (nrg,su  ,plond,numlatsex, plev)
-      call wrtout_r8_dyn (nrg,sv  ,plond,numlatsex, plev)
-      call wrtout_r8_dyn (nrg,st  ,plond,numlatsex, plev)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,su)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,sv)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,st)
 !
 !  variables used in 'dynamics' (from module comfm2)
 !
-      call wrtout_r8_dyn (nrg,du  ,plond,numlatsex, plev)
-      call wrtout_r8_dyn (nrg,dv  ,plond,numlatsex, plev)
-      call wrtout_r8_dyn (nrg,dtt ,plond,numlatsex, plev)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,du)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,dv)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,dtt)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,1,dps)
 
-      call wrtout_r8_dyn (nrg,du0 ,plond,numlatsex, plev)
-      call wrtout_r8_dyn (nrg,dv0 ,plond,numlatsex, plev)
-      call wrtout_r8_dyn (nrg,dtt0,plond,numlatsex, plev)
-      call wrtout_r8_dyn (nrg,dps0,plond,numlatsex, 1)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,du0)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,dv0)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,dtt0)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,1,dps0)
 
-      call wrtout_r8_dyn (nrg,du1 ,plond,numlatsex, plev)
-      call wrtout_r8_dyn (nrg,dv1 ,plond,numlatsex, plev)
-      call wrtout_r8_dyn (nrg,dtt1,plond,numlatsex, plev)
-      call wrtout_r8_dyn (nrg,dps1,plond,numlatsex, 1)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,du1)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,dv1)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,dtt1)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,1,dps1)
 
-      call wrtout_r8_dyn (nrg,uu  ,plond,numlatsex, plev)
-      call wrtout_r8_dyn (nrg,vv  ,plond,numlatsex, plev)
-      call wrtout_r8_dyn (nrg,tt  ,plond,numlatsex, plev)
-      call wrtout_r8_dyn (nrg,p   ,plond,numlatsex, 1)
-      call wrtout_r8_dyn (nrg,ply ,plond,numlatsex, plev)
-       
-      call wrtout_r8_dyn (nrg,up  ,plond,numlatsex, plev)
-      call wrtout_r8_dyn (nrg,vp  ,plond,numlatsex, plev)
-      call wrtout_r8_dyn (nrg,ttp ,plond,numlatsex, plev)
-      call wrtout_r8_dyn (nrg,pps ,plond,numlatsex, 1)
-      call wrtout_r8_dyn (nrg,dps ,plond,numlatsex, 1)
-       
-      call wrtout_r8_dyn (nrg,uk  ,plond,numlatsex, plev)
-      call wrtout_r8_dyn (nrg,vk  ,plond,numlatsex, plev)
-      call wrtout_r8_dyn (nrg,ttk ,plond,numlatsex, plev)
-      call wrtout_r8_dyn (nrg,psk ,plond,numlatsex, 1)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,uu)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,vv)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,tt)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,1,p)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,ply)
 
-      call wrtout_r8_dyn (nrg,tb  ,plond,numlatsex, plev)
-      call wrtout_r8_dyn (nrg,cb  ,plond,numlatsex, plev)
-      call wrtout_r8_dyn (nrg,dcb ,plond,numlatsex, plev)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,uk)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,vk)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,ttk)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,1,psk)
 
-      call wrtout_r8_dyn (nrg,hps ,plond,numlatsex, 1)
-      call wrtout_r8_dyn (nrg,c0  ,plond,numlatsex, 1)
- 
-      call wrtout_r8_dyn (nrg,cb0 ,plond,numlatsex, plev)
-      call wrtout_int_dyn(nrg,nigw,    1,numlatsex, 1)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,tb)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,cb)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,dcb)
+
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,1,hps)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,1,c0)
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,cb0)
+      do jdyn=beglatexdyn, endlatexdyn
+         local_3d_array(:,jdyn,1) = nigw(jdyn)
+      enddo
+      call wrtout_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,1,local_3d_array)
 !       
 !  some other parameters
 !
@@ -125,6 +202,7 @@ CONTAINS
 !#######################################################################
 
    subroutine read_restart_dynamics (nrg)
+      use mpi_gamil
 
 #if ( defined SPMD )
       use mpishorthand
@@ -140,6 +218,8 @@ CONTAINS
 !
       integer :: begj    ! starting latitude
       integer :: ioerr   ! error status
+      real(r8) :: local_3d_array(beglonex:endlonex,beglatexdyn:endlatexdyn,plev+2)
+      integer :: i,jdyn,jcam,k,m
 
       call initialize_prognostics
       call initialize_comfm1           !!(wh 2003.10.23)
@@ -149,83 +229,158 @@ CONTAINS
 !
 ! prognostics of cam2
 !
-      call readin_r8 (nrg,phis  ,plond )
-      call readin_r8 (nrg,omga  ,plndlv)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,1,local_3d_array,.false.)
+      do jdyn = jbeg0,jend0
+        jcam = plat + 1 - jdyn
+        do i=beglonex,endlonex
+          phis(i,jcam) = local_3d_array(i,jdyn,1)
+        enddo
+      enddo
 
-      call readin_r8 (nrg,u3(1,1,begj,n3m2)  ,plndlv)
-      call readin_r8 (nrg,v3(1,1,begj,n3m2)  ,plndlv)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,local_3d_array,.false.)
+      do k=1, plev
+      do jdyn = jbeg0,jend0
+        jcam = plat + 1 - jdyn
+        do i=beglonex,endlonex
+          omga(i,k,jcam) = local_3d_array(i,jdyn,k) 
+        enddo
+      enddo
+      enddo
 
-      call readin_r8(nrg, t3(1,1,begj,n3m2), plndlv)
-      call readin_r8(nrg, q3(1,1,1,begj,n3m2), plndlv*(pcnst+pnats))
-      call readin_r8(nrg, t31(1,1,begj), plndlv)
-      call readin_r8(nrg, q31(1,1,begj), plndlv)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,local_3d_array,.false.)
+      do k=1, plev
+      do jdyn = jbeg0,jend0
+        jcam = plat + 1 - jdyn
+        do i=beglonex,endlonex
+          u3(i,k,jcam,n3m2) = local_3d_array(i,jdyn,k) 
+        enddo
+      enddo
+      enddo
 
-      call readin_r8(nrg, ps(1,beglat,n3m2), plond)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,local_3d_array,.false.)
+      do k=1, plev
+      do jdyn = jbeg0,jend0
+        jcam = plat + 1 - jdyn
+        do i=beglonex,endlonex
+          v3(i,k,jcam,n3m2) = local_3d_array(i,jdyn,k) 
+        enddo
+      enddo
+      enddo
+
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,local_3d_array,.false.)
+      do k=1, plev
+      do jdyn = jbeg0,jend0
+        jcam = plat + 1 - jdyn
+        do i=beglonex,endlonex
+          t3(i,k,jcam,n3m2) = local_3d_array(i,jdyn,k) 
+        enddo
+      enddo
+      enddo
+
+      do m=1,pcnst+pnats
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,local_3d_array,.false.)
+      do k=1, plev
+      do jdyn = jbeg0,jend0
+        jcam = plat + 1 - jdyn
+        do i=beglonex,endlonex
+          q3(i,k,m,jcam,n3m2) = local_3d_array(i,jdyn,k) 
+        enddo
+      enddo
+      enddo
+      enddo
+
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,local_3d_array,.false.)
+      do k=1, plev
+      do jdyn = jbeg0,jend0
+        jcam = plat + 1 - jdyn
+        do i=beglonex,endlonex
+          t31(i,k,jcam) = local_3d_array(i,jdyn,k) 
+        enddo
+      enddo
+      enddo
+
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,local_3d_array,.false.)
+      do k=1, plev
+      do jdyn = jbeg0,jend0
+        jcam = plat + 1 - jdyn
+        do i=beglonex,endlonex
+          q31(i,k,jcam) = local_3d_array(i,jdyn,k) 
+        enddo
+      enddo
+      enddo
+
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,1,local_3d_array,.false.)
+      do jdyn = jbeg0,jend0
+        jcam = plat + 1 - jdyn
+        do i=beglonex,endlonex
+          ps(i,jcam,n3m2) = local_3d_array(i,jdyn,1)
+        enddo
+      enddo
 !
 ! 'prognostics' of fm2003 : u,v,t,q,wpa,pes,ghs  ( in module comfm1 )
 !
-      call readin_r8_dyn (nrg,u   ,plond,numlatsex, plev)
-      call readin_r8_dyn (nrg,v   ,plond,numlatsex, plev)
-      call readin_r8_dyn (nrg,t   ,plond,numlatsex, plev)
-      call readin_r8_dyn (nrg,q   ,plond,numlatsex, plev)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,u,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,v,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,t,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,q,.true.)
 
-      call readin_r8_dyn (nrg,ws  ,plond,numlatsex, plevp)
-      call readin_r8_dyn (nrg,wpa ,plond,numlatsex, plev)
-      call readin_r8_dyn (nrg,ghi ,plond,numlatsex, plevp)
-      call readin_r8_dyn (nrg,pes ,plond,numlatsex, 1)
-      call readin_r8_dyn (nrg,ghs ,plond,numlatsex, 1)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plevp,ws,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,wpa,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plevp,ghi,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,1,pes,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,1,ghs,.true.)
 !
 !  tendencies of fm2003 : su,sv,st  (sq will always be 0.0)
 !
-      call readin_r8_dyn (nrg,su  ,plond,numlatsex, plev)
-      call readin_r8_dyn (nrg,sv  ,plond,numlatsex, plev)
-      call readin_r8_dyn (nrg,st  ,plond,numlatsex, plev)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,su,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,sv,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,st,.true.)
 !
 !  variables used in 'dynamics' (from module comfm2)
 !
-      call readin_r8_dyn (nrg,du  ,plond,numlatsex, plev)
-      call readin_r8_dyn (nrg,dv  ,plond,numlatsex, plev)
-      call readin_r8_dyn (nrg,dtt ,plond,numlatsex, plev)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,du,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,dv,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,dtt,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,1,dps,.true.)
 
-      call readin_r8_dyn (nrg,du0 ,plond,numlatsex, plev)
-      call readin_r8_dyn (nrg,dv0 ,plond,numlatsex, plev)
-      call readin_r8_dyn (nrg,dtt0,plond,numlatsex, plev)
-      call readin_r8_dyn (nrg,dps0,plond,numlatsex, 1)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,du0,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,dv0,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,dtt0,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,1,dps0,.true.)
 
-      call readin_r8_dyn (nrg,du1 ,plond,numlatsex, plev)
-      call readin_r8_dyn (nrg,dv1 ,plond,numlatsex, plev)
-      call readin_r8_dyn (nrg,dtt1,plond,numlatsex, plev)
-      call readin_r8_dyn (nrg,dps1,plond,numlatsex, 1)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,du1,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,dv1,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,dtt1,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,1,dps1,.true.)
 
-      call readin_r8_dyn (nrg,uu  ,plond,numlatsex, plev)
-      call readin_r8_dyn (nrg,vv  ,plond,numlatsex, plev)
-      call readin_r8_dyn (nrg,tt  ,plond,numlatsex, plev)
-      call readin_r8_dyn (nrg,p   ,plond,numlatsex, 1)
-      call readin_r8_dyn (nrg,ply ,plond,numlatsex, plev)
-       
-      call readin_r8_dyn (nrg,up  ,plond,numlatsex, plev)
-      call readin_r8_dyn (nrg,vp  ,plond,numlatsex, plev)
-      call readin_r8_dyn (nrg,ttp ,plond,numlatsex, plev)
-      call readin_r8_dyn (nrg,pps ,plond,numlatsex, 1)
-      call readin_r8_dyn (nrg,dps ,plond,numlatsex, 1)
-       
-      call readin_r8_dyn (nrg,uk  ,plond,numlatsex, plev)
-      call readin_r8_dyn (nrg,vk  ,plond,numlatsex, plev)
-      call readin_r8_dyn (nrg,ttk ,plond,numlatsex, plev)
-      call readin_r8_dyn (nrg,psk ,plond,numlatsex, 1)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,uu,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,vv,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,tt,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,1,p,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,ply,.true.)
 
-      call readin_r8_dyn (nrg,tb  ,plond,numlatsex, plev)
-      call readin_r8_dyn (nrg,cb  ,plond,numlatsex, plev)
-      call readin_r8_dyn (nrg,dcb ,plond,numlatsex, plev)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,uk,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,vk,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,ttk,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,1,psk,.true.)
 
-      call readin_r8_dyn (nrg,hps ,plond,numlatsex, 1)
-      call readin_r8_dyn (nrg,c0  ,plond,numlatsex, 1)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,tb,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,cb,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,dcb,.true.)
 
-      call readin_r8_dyn (nrg,cb0 ,plond,numlatsex, plev)
-      call readin_int_dyn (nrg,nigw,   1,numlatsex, 1)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,1,hps,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,1,c0,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,cb0,.true.)
+      call readin_3D_array_dyn(nrg,beglonex,endlonex,beglatexdyn,endlatexdyn,1,1,local_3d_array,.true.)
+      do jdyn=jbeg0, jend0
+         nigw(jdyn) = local_3d_array(beglonex+1,jdyn,1)
+      enddo
 !       
 !  some other parameters
 !
+      itime = 0
+      dlt1 = 0.0
+      dlt2 = 0.0
       if (masterproc) then
          read(nrg, iostat=ioerr) itime ,dlt1 ,dlt2
 
@@ -237,13 +392,6 @@ CONTAINS
 
 
 #if ( defined SPMD )
-!!   call mpibcast (tmass0,1         ,mpir8  ,0,mpicom)      
-!!   call mpibcast (fixmas,1         ,mpir8  ,0,mpicom)
-!!   call mpibcast (hw1   ,pcnst     ,mpir8  ,0,mpicom)
-!!   call mpibcast (hw2   ,pcnst     ,mpir8  ,0,mpicom)
-!!   call mpibcast (hw3   ,pcnst     ,mpir8  ,0,mpicom)   
-!!   call mpibcast (alpha ,pcnst     ,mpir8  ,0,mpicom)
-
      call mpibcast (dlt1  ,1         ,mpir8  ,0,mpicom)      
      call mpibcast (dlt2  ,1         ,mpir8  ,0,mpicom)
      call mpibcast (itime ,1         ,mpiint ,0,mpicom)

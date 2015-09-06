@@ -468,10 +468,10 @@ contains
       use buffer
       use comsrf
       use phys_grid
+      use mpi_gamil
       use tracers, only: ixcldw
 #if ( defined SPMD )
-      use mpishorthand
-      use spmd_dyn, only: npes, compute_gsfactors
+      use spmd_dyn, only: npes
 #endif
 !-----------------------------------------------------------------------
       implicit none
@@ -484,8 +484,8 @@ contains
       real(r8), allocatable :: tmpchunk(:,:)
       integer, parameter :: iend = i1+plon-1
       integer, parameter :: jend = j1+plat-1
-      integer begj
-      integer n,i,j
+      integer begj,endj
+      integer n,i,j,k
 
 #if ( defined SPMD )
       integer :: numperlat         ! number of values per latitude band
@@ -502,37 +502,24 @@ contains
 #endif
 
       begj = beglatex + numbnd
+      endj = endlat
 
 !PW Dynamics fields
 #if ( defined SPMD )
-      numperlat = plond
-      call compute_gsfactors (numperlat, numrecv, numsend, displs)
-
-      call mpiscatterv (ps_tmp,     numsend, displs, mpir8, ps(1,beglat,1),   numrecv, mpir8, 0, mpicom)
-      call mpiscatterv (phis_tmp,   numsend, displs, mpir8, phis(1,beglat),   numrecv, mpir8, 0, mpicom)
-!!    call mpiscatterv (dpsl_tmp,   numsend, displs, mpir8, dpsl(1,beglat),   numrecv, mpir8, 0, mpicom)
-!!    call mpiscatterv (dpsm_tmp,   numsend, displs, mpir8, dpsm(1,beglat),   numrecv, mpir8, 0, mpicom)
-
-      numperlat = plndlv
-      call compute_gsfactors (numperlat, numrecv, numsend, displs)
-
-      call mpiscatterv (u3_tmp,   numsend, displs, mpir8, u3(i1,1,begj,1),    numrecv, mpir8, 0, mpicom)
-      call mpiscatterv (v3_tmp,   numsend, displs, mpir8, v3(i1,1,begj,1),    numrecv, mpir8, 0, mpicom)
-      call mpiscatterv (t3_tmp,   numsend, displs, mpir8, t3(i1,1,begj,1),    numrecv, mpir8, 0, mpicom)
-!!    call mpiscatterv (vort_tmp, numsend, displs, mpir8, vort(1,1,beglat,1), numrecv, mpir8, 0, mpicom)
-!!    call mpiscatterv (div_tmp,  numsend, displs, mpir8, div(1,1,beglat,1),  numrecv, mpir8, 0, mpicom)
-
-      numperlat = plndlv*(pcnst+pnats)
-      call compute_gsfactors (numperlat, numrecv, numsend, displs)
-
-      call mpiscatterv (q3_tmp, numsend, displs, mpir8, q3(i1,1,1,begj,1), numrecv, mpir8, 0, mpicom)
+      call gamil_scatter_2D_array_phys(ps_tmp, beglonex, endlonex, beglat, endlat, ps(beglonex,beglat,1)) 
+      call gamil_scatter_2D_array_phys(phis_tmp, beglonex, endlonex, beglat, endlat, phis(beglonex,beglat)) 
+      call gamil_scatter_3D_array_phys(u3_tmp, beglonex, endlonex, beglatex, endlatex, plev, u3(beglonex,1,beglatex,1))
+      call gamil_scatter_3D_array_phys(v3_tmp, beglonex, endlonex, beglatex, endlatex, plev, v3(beglonex,1,beglatex,1))
+      call gamil_scatter_3D_array_phys(t3_tmp, beglonex, endlonex, beglatex, endlatex, plev, t3(beglonex,1,beglatex,1))
+      call gamil_scatter_3D_array_phys(q3_tmp, beglonex, endlonex, beglatex, endlatex, plev*(pcnst+pnats), & 
+           q3(beglonex,1,1,beglatex,1))
 
 #else
 
-      u3(i1:iend,:,j1:jend,1) = u3_tmp(:plon,:,:)
-      v3(i1:iend,:,j1:jend,1) = v3_tmp(:plon,:,:)
-      t3(i1:iend,:,j1:jend,1) = t3_tmp(:plon,:,:)
-      q3(i1:iend,:,:,j1:jend,1) = q3_tmp(:plon,:,:,:)
+      u3(:plon,:,j1:jend,1) = u3_tmp(:plon,:,:)
+      v3(:plon,:,j1:jend,1) = v3_tmp(:plon,:,:)
+      t3(:plon,:,j1:jend,1) = t3_tmp(:plon,:,:)
+      q3(:plon,:,:,j1:jend,1) = q3_tmp(:plon,:,:,:)
 
       ps(:plon,:,1)    = ps_tmp(:plon,:)
       phis(:plon,:)    = phis_tmp(:plon,:)
@@ -545,14 +532,14 @@ contains
 ! set the periodic boundary conditions
 !-----------------------------------------------------------------------
 
-              u3(1,:,:,1) = u3_tmp(plon,:,:)
-              v3(1,:,:,1) = v3_tmp(plon,:,:)
-              t3(1,:,:,1) = t3_tmp(plon,:,:)
-              q3(1,:,:,:,1) = q3_tmp(plon,:,:,:)
-              u3(plond,:,:,1) = u3_tmp(1,:,:)
-              v3(plond,:,:,1) = v3_tmp(1,:,:)
-              t3(plond,:,:,1) = t3_tmp(1,:,:)
-              q3(plond,:,:,:,1) = q3_tmp(1,:,:,:)
+              u3(plon+1,:,:,1) = u3_tmp(1,:,:)
+              v3(plon+1,:,:,1) = v3_tmp(1,:,:)
+              t3(plon+1,:,:,1) = t3_tmp(1,:,:)
+              q3(plon+1,:,:,:,1) = q3_tmp(1,:,:,:)
+              u3(plond,:,:,1) = u3_tmp(2,:,:)
+              v3(plond,:,:,1) = v3_tmp(2,:,:)
+              t3(plond,:,:,1) = t3_tmp(2,:,:)
+              q3(plond,:,:,:,1) = q3_tmp(2,:,:,:)
 
               ps(plon+1,:,1) = ps_tmp(1,:)
               ps(plond ,:,1) = ps_tmp(2,:)
@@ -594,6 +581,36 @@ contains
 !
 !JR cloud and cloud water initialization.  Does this belong somewhere else?
 !
+
+      if (masterproc) then
+         do k = 1, plev
+         do j = 1, plat
+         do i = 1,plond
+            qcwat_tmp(i,k,j) = i * k*j
+         enddo
+         enddo
+         enddo
+         write(6,*) 'check scatter gather'
+      endif
+
+      call scatter_field_to_chunk(1,plev,1,plond,qcwat_tmp,qcwat(1,1,begchunk,1))
+      call gather_chunk_to_field(1,plev,1,plond, qcwat(1,1,begchunk,1), qcwat_tmp)
+
+
+      if (masterproc) then
+         do k = 1, plev
+         do j = 1, plat
+         do i = 1,plond
+            if (qcwat_tmp(i,k,j) .ne. i*k*j) then
+               write (6,*) 'error of scatter gather chunk', i, j, k
+            endif
+         enddo
+         enddo
+         enddo
+         write(6,*) 'check scatter gather'
+      endif
+
+
       if (masterproc) then
          qcwat_tmp(:plon,:,:) = q3_tmp(:plon,:,1,:)
          lcwat_tmp(:plon,:,:) = q3_tmp(:plon,:,ixcldw,:)

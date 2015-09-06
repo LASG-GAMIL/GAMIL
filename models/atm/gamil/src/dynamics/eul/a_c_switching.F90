@@ -9,115 +9,51 @@ subroutine a_c_switching( fu, fv, t2, beglat, endlat)
 !!----------------------------------------------------------------------------------
 
    use shr_kind_mod, only: r8 => shr_kind_r8
-   use pmgrid,       only: plon, plond, plat, plev, i1, numbnd, beglatex, endlatex
+   use pmgrid,       only: plon, plond, plat, plev, numbnd, beglatex, endlatex, beglatexdyn, endlatexdyn
    use comfm1,       only: su, sv, st, q
    use prognostics,  only: qminus
-
-#if ( defined SPMD )
-   use mpishorthand, only: mpicom
-#endif
+   use mpi_gamil
 
    implicit none
-
-#if (defined SPMD)
-#include <mpif.h>
-#include <commpi.h>
-
-   real(r8) :: fvtmp(plond,plev)
-   integer  :: isend, irecv
-   integer  :: istatus(mpi_status_size)
-#endif
    
    integer  :: beglat, endlat
-   real(r8) :: fu (plond,plev,beglat:endlat)
-   real(r8) :: fv (plond,plev,beglat:endlat)
-   real(r8) :: t2 (plond,plev,beglat:endlat)
-
-   real(r8) :: qsums,qsumn,t2sums,t2sumn
+   real(r8) :: fu (beglonex:endlonex,plev,beglat:endlat)
+   real(r8) :: fv (beglonex:endlonex,plev,beglat:endlat)
+   real(r8) :: t2 (beglonex:endlonex,plev,beglat:endlat)
+   real(r8) :: fu_fv_tmp(beglonex:endlonex,beglatexdyn:endlatexdyn,plev)
 
    integer  :: begj, endj
-   integer  :: i,    jdyn, jcam, k
+   integer  :: i,    jdyn, jcam, k, j
    
 !!-----------------------------------------------------------------------------
+
+   call register_comm_array(beglonex,endlonex,beglatexdyn,endlatexdyn,1,plev,1,1,fu_fv_tmp(:,beglatexdyn,1))
 
      begj = beglat
      endj = endlat
 
-#if (defined SPMD)
+     do jdyn=jbeg0, jend0
+       if (jdyn .eq. 1 .or. jdyn .eq. plat) then
+         jcam = plat-jdyn+1
+         call gamil_average_pole_data_phys(jdyn,beglonex,endlonex,plev,t2(beglonex,1,jcam),qminus(beglonex,1,1,jcam))
+      endif
+     enddo
 
-      call mpi_isend( fv(1,1,endlat), plond*plev, mpi_double_precision, &
-                                         itop, 1, mpicom, isend, ierr) 
-      call mpi_irecv( fvtmp(1,1),     plond*plev, mpi_double_precision, &
-                                         ibot, 1, mpicom, irecv, ierr)
-#endif
 
-!!(wh 2004.02.25)
-
-#if ( ! defined SPMD )
-    do k=1,plev
-       qsumn=0.0
-       qsums=0.0
-       t2sumn=0.0
-       t2sums=0.0
-       do i=1,plond-2
-          qsumn=qsumn+qminus(i1+i-1,k,1,endlat)
-          qsums=qsums+qminus(i1+i-1,k,1,beglat)
-          t2sumn=t2sumn+t2(i,k,endlat)
-          t2sums=t2sums+t2(i,k,beglat)
-       enddo
-       qsumn=qsumn/dble(plond-2)
-       qsums=qsums/dble(plond-2)
-       t2sumn=t2sumn/dble(plond-2)
-       t2sums=t2sums/dble(plond-2)
-       do i=1,plond
-          qminus(i,k,1,endlat)=qsumn
-          qminus(i,k,1,beglat)=qsums
-          t2(i,k,endlat)=t2sumn
-          t2(i,k,beglat)=t2sums
-       enddo
+!$OMP PARALLEL DO PRIVATE (k, jcam, jdyn, i)
+    do k=1, plev
+    do jdyn = jbeg0,jend0
+      jcam = plat + 1 - jdyn
+      do i=beglonex,endlonex
+        fu_fv_tmp(i,jdyn,k) = fu(i,k,jcam)
+      enddo
     enddo
-#else
+    enddo
 
-    if (myrank.eq.0) then
-     jcam = beglat
-     do k=1,plev
-       qsums=0.0
-       t2sums=0.0
-       do i=1,plond-2
-          qsums=qsums+qminus(i1+i-1,k,1,jcam)
-          t2sums=t2sums+t2(i,k,jcam)
-       enddo
-       qsums=qsums/dble(plond-2)
-       t2sums=t2sums/dble(plond-2)
-       do i=1,plond
-          qminus(i,k,1,jcam)=qsums
-          t2(i,k,jcam)=t2sums
-       enddo
-     enddo
-    endif
-!--
-   if (myrank.eq.nprocs-1) then
-    jcam = endlat
-    do k=1,plev
-       qsumn=0.0
-       t2sumn=0.0
-       do i=1,plond-2
-          qsumn=qsumn+qminus(i1+i-1,k,1,jcam)
-          t2sumn=t2sumn+t2(i,k,jcam)
-       enddo
-       qsumn=qsumn/dble(plond-2)
-       t2sumn=t2sumn/dble(plond-2)
-       do i=1,plond
-          qminus(i,k,1,jcam)=qsumn
-          t2(i,k,jcam)=t2sumn
-       enddo
-     enddo
-    endif
-!--
-#endif
-!!(wh)
+    call gamil_arrays_comm(COMM_ROTATE_LEFT,2,fu_fv_tmp(:,beglatexdyn,1))
+    call gamil_arrays_comm(COMM_TO_RIGHT,1,fu_fv_tmp(:,beglatexdyn,1))
 
-
+!$OMP PARALLEL DO PRIVATE (k, jcam, jdyn, i)
      do k=1,plev
 
 !--su--
@@ -126,13 +62,9 @@ subroutine a_c_switching( fu, fv, t2, beglat, endlat)
 
            jdyn = plat + 1 - jcam
 
-         do i=2,plon
-            su(i,jdyn,k) = su(i,jdyn,k) + 0.5*( fu(i-1,k,jcam)+fu(i,k,jcam) )
+         do i=ibeg1,iend1
+            su(i,jdyn,k) = su(i,jdyn,k) + 0.5*( fu_fv_tmp(i-1,jdyn,k)+fu_fv_tmp(i,jdyn,k) )
          enddo
-            su(1,jdyn,k) = su(1,jdyn,k) + 0.5*( fu(plon,k,jcam)+fu(1,k,jcam) )
-
-            su(plon+1,jdyn,k)= su(1,jdyn,k)
-            su(plon+2,jdyn,k)= su(2,jdyn,k)
         enddo
 
 !--st--
@@ -141,11 +73,9 @@ subroutine a_c_switching( fu, fv, t2, beglat, endlat)
 
            jdyn = plat + 1 - jcam
 
-         do i=1,plon
+         do i=beglonex,iend2
             st(i,jdyn,k)= st(i,jdyn,k) + t2(i,k,jcam)
          enddo
-            st(plon+1,jdyn,k)= st(1,jdyn,k)
-            st(plon+2,jdyn,k)= st(2,jdyn,k)
         enddo
 !--q--
  
@@ -153,81 +83,52 @@ subroutine a_c_switching( fu, fv, t2, beglat, endlat)
 
            jdyn = plat + 1 - jcam
 
-         do i=1,plon
-            q(i,jdyn,k) = qminus(i1+i-1,k,1,jcam)
+         do i=beglonex,iend2
+            q(i,jdyn,k) = qminus(i,k,1,jcam)
          enddo
-            q(plon+1,jdyn,k) = q(1,jdyn,k)
-            q(plon+2,jdyn,k) = q(2,jdyn,k)
         enddo
 
 !------------
 
      enddo
 
+
+
 !--sv--
 
-#if (!defined SPMD)
-
-     do k=1,plev
-        do jcam=2,plat
-		  
-          jdyn = plat + 1 - jcam
-
-         do i=1,plon
-            sv(i,jdyn,k)= sv(i,jdyn,k)-0.5*( fv(i,k,jcam)+fv(i,k,jcam-1) )
-         enddo
-            sv(plon+1,jdyn,k) = sv(1,jdyn,k)
-            sv(plon+2,jdyn,k) = sv(2,jdyn,k)
-        enddo
-
-         do i=1,plond
-            sv(i,plat,k) = 0.0
-         enddo
-     enddo
-#else
-
-    begj = beglat + 1
-
-    do k=1,plev
-      do jcam=begj,endj
-
-         jdyn = plat + 1 - jcam
-
-         do i=1,plon
-            sv(i,jdyn,k)= sv(i,jdyn,k)-0.5*( fv(i,k,jcam)+fv(i,k,jcam-1) )
-         enddo
-            sv(plon+1,jdyn,k) = sv(1,jdyn,k)
-            sv(plon+2,jdyn,k) = sv(2,jdyn,k)
+!$OMP PARALLEL DO PRIVATE (k, jcam, jdyn, i)
+    do k=1, plev
+    do jdyn = jbeg0,jend0
+      jcam = plat + 1 - jdyn
+      do i=beglonex,endlonex
+        fu_fv_tmp(i,jdyn,k) = fv(i,k,jcam)
       enddo
     enddo
-!!-------------------------------  for the lat next to the south boundary
+    enddo
+    call gamil_arrays_comm(COMM_TO_TOP,1,fu_fv_tmp(:,beglatexdyn,1))
 
-    call mpi_wait(isend,istatus,ierr)
-    call mpi_wait(irecv,istatus,ierr)
-
-    jdyn = plat+1-beglat                   !! (jdyn = endlatexdyn-1)
-
-    if (myrank.eq.0) then                  !! (jdyn = the south pole)
-
-       do k=1,plev
-        do i=1,plond
-           sv(i,jdyn,k) = 0.0
-        enddo
+!$OMP PARALLEL DO PRIVATE (k, jcam, jdyn, i)
+     do k=1,plev
+       do jdyn=jbeg0,jend0
+         if (jdyn .eq. plat) then
+           do i=beglonex,endlonex
+             sv(i,jdyn,k) = 0.0
+           enddo
+         else
+           jcam = plat + 1 - jdyn
+           do i=beglonex,iend2
+             sv(i,jdyn,k)= sv(i,jdyn,k)-0.5*( fu_fv_tmp(i,jdyn,k)+fu_fv_tmp(i,jdyn+1,k) )
+           enddo
+         endif
        enddo
+     enddo
 
-    else                                   !! (jdyn = endlatexdyn-1)
-       do k=1,plev
-        do i= 1,plon
-           sv(i,jdyn,k) = sv(i,jdyn,k)-0.5*( fv(i,k,beglat)+fvtmp(i,k) )
-        enddo
-           sv(plon+1,jdyn,k) = sv(1,jdyn,k)
-           sv(plon+2,jdyn,k) = sv(2,jdyn,k)
-		    
-       enddo
-    endif
-!!------------------------
+   call gamil_arrays_comm(COMM_TO_RIGHT,1,su(:,beglatexdyn,1)) 
+   call gamil_arrays_comm(COMM_ROTATE_LEFT,2,su(:,beglatexdyn,1),st(:,beglatexdyn,1), &
+                           q(:,beglatexdyn,1),sv(:,beglatexdyn,1))
 
-#endif
+   call remove_comm_array(fu_fv_tmp(:,beglatexdyn,1))
+
 
      return
 end subroutine a_c_switching

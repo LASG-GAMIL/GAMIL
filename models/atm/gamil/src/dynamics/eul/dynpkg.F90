@@ -48,14 +48,9 @@
 
 
 !---------------------------Local workspace-----------------------------
-
-   real(r8),allocatable :: ply(:,:,:)      !
-
-   real(r8),allocatable :: tb (:,:,:)      !
-   real(r8),allocatable :: uk (:,:,:)      !
-   real(r8),allocatable :: vk (:,:,:)      !
-   real(r8),allocatable :: tk (:,:,:)      !  for fm2003
-   real(r8),allocatable :: qk (:,:,:)      !
+   real(r8),allocatable :: tkk (:,:,:)      !  for fm2003
+   real(r8),allocatable :: ukk (:,:,:)      !  for fm2003
+   real(r8),allocatable :: vkk (:,:,:)      !  for fm2003
 
    integer  :: i,j,k
    integer  :: begj
@@ -66,13 +61,9 @@
 !----------------------------------------------------------
 
 
-      allocate (ply (plond, beglatexdyn:endlatexdyn, plevp))
-
-      allocate (tb  (plond, beglatexdyn:endlatexdyn, plev))
-      allocate (uk  (plond, beglatexdyn:endlatexdyn, plev))
-      allocate (vk  (plond, beglatexdyn:endlatexdyn, plev))
-      allocate (tk  (plond, beglatexdyn:endlatexdyn, plev))
-      allocate (qk  (plond, beglatexdyn:endlatexdyn, plev))
+      allocate (tkk (beglonex:endlonex, beglatexdyn:endlatexdyn, plev))
+      allocate (ukk (beglonex:endlonex, beglatexdyn:endlatexdyn, plev))
+      allocate (vkk (beglonex:endlonex, beglatexdyn:endlatexdyn, plev))
 !
       begj = beglatexdyn
 
@@ -108,29 +99,31 @@
    if (.not.aqua_planet)  then
    !if ((.not.aqua_planet).and.(.not.adiabatic))  then
 
+!$OMP PARALLEL DO PRIVATE (I, J, K)
       DO K=1,plev
-        DO J=beglatexdyn+numbnd,endlatexdyn-numbnd
-          DO I=1,plond
-             UK(I,J,K)=U(I,J,K)
-             VK(I,J,K)=V(I,J,K)
-             TK(I,J,K)=T(I,J,K)
+        DO J=jbeg0,jend0
+          DO I=beglonex,endlonex
+             UKK(I,J,K)=U(I,J,K)
+             VKK(I,J,K)=V(I,J,K)
+             tkk(I,J,K)=T(I,J,K)
              QK(I,J,K)=Q(I,J,K)
           END DO
         END DO
       END DO
 
-
       CALL HDIFUS(U,V,T,Q,FRDT,FRDS,FRDU,FRDV,FRDP,TB,PLY,DXVPN,DXVPS)
 
+
+!$OMP PARALLEL DO PRIVATE (I, J, K)
       DO K=1,plev
-        DO J=beglatexdyn+numbnd,endlatexdyn-numbnd
-          DO I=1,plond
-             SU(I,J,K)=(U(I,J,K)-UK(I,J,K))/DTHDFS
-             SV(I,J,K)=(V(I,J,K)-VK(I,J,K))/DTHDFS
-             ST(I,J,K)=(T(I,J,K)-TK(I,J,K))/DTHDFS
-             U(I,J,K)=UK(I,J,K)
-             V(I,J,K)=VK(I,J,K)
-             T(I,J,K)=TK(I,J,K)
+        DO J=jbeg0,jend0
+          DO I=beglonex,endlonex
+             SU(I,J,K)=(U(I,J,K)-UKK(I,J,K))/DTHDFS
+             SV(I,J,K)=(V(I,J,K)-VKK(I,J,K))/DTHDFS
+             ST(I,J,K)=(T(I,J,K)-tkk(I,J,K))/DTHDFS
+             U(I,J,K)=UKK(I,J,K)
+             V(I,J,K)=VKK(I,J,K)
+             T(I,J,K)=tkk(I,J,K)
              Q(I,J,K)=QK(I,J,K)
           END DO
         END DO
@@ -144,15 +137,6 @@
    endif
 
       call t_stopf('hdifus')
-
-      deallocate (ply)
-
-      deallocate (tb)
-      deallocate (uk)
-      deallocate (vk)
-      deallocate (tk)
-      deallocate (qk)
-
 
    return
 

@@ -300,7 +300,7 @@ contains
 !
 !========================================================================
 !
-   integer function get_block_owner_d(blockid)
+   integer function get_block_owner_d(lat_indx, lon_indx)
 
 !----------------------------------------------------------------------- 
 ! 
@@ -313,17 +313,18 @@ contains
 ! 
 !-----------------------------------------------------------------------
 #if ( defined SPMD )
-   use spmd_dyn, only: proc
+   use mpi_gamil, only: lat_local_proc_id
 #endif
 
    implicit none
 !------------------------------Arguments--------------------------------
-   integer, intent(in) :: blockid  ! global block id
+   integer, intent(in) :: lat_indx  ! global index of latitude
+   integer, intent(in) :: lon_indx  ! global index of longitude
 
 !-----------------------------------------------------------------------
 !  latitude slice block
 #if (defined SPMD)
-   get_block_owner_d = proc(blockid)
+   get_block_owner_d = lat_local_proc_id(lon_indx,lat_indx)
 #else
    get_block_owner_d = 0
 #endif

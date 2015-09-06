@@ -25,34 +25,27 @@ contains
 ! also writes dynamics variables (on physics grid) to history file
 !------------------------------------------------------------------------------
     use physconst,     only: cappa
+    use mpi_gamil
 !------------------------------Arguments--------------------------------
-    real(r8), intent(in) :: ps  (plond, beglat:endlat)            ! surface pressure
+    real(r8), intent(in) :: ps  (beglonex:endlonex, beglat:endlat)        ! surface pressure
+    real(r8), intent(in) :: t3  (beglonex:endlonex, plev, beglat:endlat)  ! temperature        !!
+    real(r8), intent(in) :: t31 (beglonex:endlonex, plev, beglat:endlat)  ! temperature
+    real(r8), intent(in) :: t32 (beglonex:endlonex, plev, beglat:endlat)  ! temperature
 
-!!  real(r8), intent(in) :: t3  (plond, plev, beglatex:beglatex+numlats-1)  ! temperature
+    real(r8), intent(in) :: u3  (beglonex:endlonex, plev, beglat:endlat)  ! u-wind component   !!
+    real(r8), intent(in) :: v3  (beglonex:endlonex, plev, beglat:endlat)  ! v-wind component   !!(wh 03.10.28)
+    real(r8), intent(in) :: q3  (beglonex:endlonex, plev, pcnst+pnats, beglat:endlat) ! constituents !!
+    real(r8), intent(in) :: q31 (beglonex:endlonex, plev, beglat:endlat) ! constituents
+    real(r8), intent(in) :: q32 (beglonex:endlonex, plev, beglat:endlat) ! constituents
 
-!!  real(r8), intent(in) :: u3  (plond, plev, beglatex:beglatex+numlats-1)  ! u-wind component
-!!  real(r8), intent(in) :: v3  (plond, plev, beglatex:beglatex+numlats-1)  ! v-wind component
-!!  real(r8), intent(in) :: q3  (plond, plev, pcnst+pnats, beglatex:beglatex+numlats-1)
-
-    real(r8), intent(in) :: t3  (plond, plev, beglat:endlat)  ! temperature        !!
-    real(r8), intent(in) :: t31 (plond, plev, beglat:endlat)  ! temperature
-    real(r8), intent(in) :: t32 (plond, plev, beglat:endlat)  ! temperature
-
-    real(r8), intent(in) :: u3  (plond, plev, beglat:endlat)  ! u-wind component   !!
-    real(r8), intent(in) :: v3  (plond, plev, beglat:endlat)  ! v-wind component   !!(wh 03.10.28)
-    real(r8), intent(in) :: q3  (plond, plev, pcnst+pnats, beglat:endlat) ! constituents !!
-    real(r8), intent(in) :: q31 (plond, plev, beglat:endlat) ! constituents
-    real(r8), intent(in) :: q32 (plond, plev, beglat:endlat) ! constituents
-
-    real(r8), intent(in) :: omga(plond, plev, beglat:endlat)      ! vertical velocity
-    real(r8), intent(in) :: phis(plond, beglat:endlat)            ! Surface geopotential
+    real(r8), intent(in) :: omga(beglonex:endlonex, plev, beglat:endlat)      ! vertical velocity
+    real(r8), intent(in) :: phis(beglonex:endlonex, beglat:endlat)            ! Surface geopotential
 
     type(physics_state), intent(out), dimension(begchunk:endchunk) :: phys_state
 !
 !---------------------------Local workspace-----------------------------
     real(r8), allocatable, dimension(:) :: &
-       bbuffer, cbuffer  &            ! transpose buffers
-       ,buf1                          !ljli(05-08-11)
+       bbuffer, cbuffer              ! transpose buffers
 
     integer :: i,k,j,m,lchnk         ! indices
     integer :: ncol                  ! number of columns in current chunk
@@ -112,34 +105,36 @@ contains
 
        allocate(bbuffer(tsize*block_buf_nrecs))
        allocate(cbuffer(tsize*chunk_buf_nrecs))
-       allocate(buf1(tsize*block_buf_nrecs))
 
        do j=beglat,endlat
 
           call block_to_chunk_send_pters(j,plon,plev+1,tsize,bpter)
 
           do i=1,nlon(j)
+             if (i.ge.ibeg0 .and. i.le.iend0) then
 
-             bbuffer(bpter(i,0))   = ps  (i,j)
-             bbuffer(bpter(i,0)+1) = phis(i,j)
+                bbuffer(bpter(i,0))   = ps  (i,j)
+                bbuffer(bpter(i,0)+1) = phis(i,j)
 
-             do k=1,plev
+                do k=1,plev
 
-                bbuffer(bpter(i,k))   = t3  (i,k,j)
-                bbuffer(bpter(i,k)+1) = u3  (i,k,j)
-                bbuffer(bpter(i,k)+2) = v3  (i,k,j)
-                bbuffer(bpter(i,k)+3) = omga(i,k,j)
+                   bbuffer(bpter(i,k))   = t3  (i,k,j)
+                   bbuffer(bpter(i,k)+1) = u3  (i,k,j)
+                   bbuffer(bpter(i,k)+2) = v3  (i,k,j)
+                   bbuffer(bpter(i,k)+3) = omga(i,k,j)
 
-                do m=1,pcnst+pnats
-!                   bbuffer(bpter(i,k)+3+m) = q3  (i,k,m,j)
-                   bbuffer(bpter(i,k)+7+m) = q3(i,k,m,j)
-                end do
+                   do m=1,pcnst+pnats
+!                      bbuffer(bpter(i,k)+3+m) = q3  (i,k,m,j)
+                      bbuffer(bpter(i,k)+3+m) = q3(i,k,m,j)
+                   end do
 !????????
-                buf1(bpter(i,k)+3+pcnst+pnats+1) = q31 (i,k,j)
-                buf1(bpter(i,k)+3+pcnst+pnats+2) = t31 (i,k,j)
-                buf1(bpter(i,k)+3+pcnst+pnats+3) = q32 (i,k,j)
-                buf1(bpter(i,k)+3+pcnst+pnats+4) = t32 (i,k,j)
-             end do
+                   bbuffer(bpter(i,k)+3+pcnst+pnats+1) = q31 (i,k,j)
+                   bbuffer(bpter(i,k)+3+pcnst+pnats+2) = q32 (i,k,j)
+                   bbuffer(bpter(i,k)+3+pcnst+pnats+3) = t31 (i,k,j)
+                   bbuffer(bpter(i,k)+3+pcnst+pnats+4) = t32 (i,k,j)
+                end do
+
+             endif
 
           end do
 
@@ -169,7 +164,10 @@ contains
                 do m=1,pcnst+pnats
                    phys_state(lchnk)%q (i,k,m) = cbuffer(cpter(i,k)+3+m)
                 end do
-
+                phys_state(lchnk)%q1(i,k)      = cbuffer(cpter(i,k)+3+pcnst+pnats+1)
+                phys_state(lchnk)%q2(i,k)      = cbuffer(cpter(i,k)+3+pcnst+pnats+2) 
+                phys_state(lchnk)%t1(i,k)      = cbuffer(cpter(i,k)+3+pcnst+pnats+3) 
+                phys_state(lchnk)%t2(i,k)      = cbuffer(cpter(i,k)+3+pcnst+pnats+4) 
              end do
 
           end do
@@ -178,7 +176,6 @@ contains
 
        deallocate(bbuffer)
        deallocate(cbuffer)
-       deallocate(buf1)
    endif
 
 !-----------------------------------------------------------------------
@@ -213,24 +210,26 @@ contains
   end subroutine d_p_coupling
 
 !===============================================================================
-  subroutine p_d_coupling(phys_state, phys_tend, t2, fu, fv, qminus, qnats, q31, t31)
+  subroutine p_d_coupling(phys_state, phys_tend, t2, fu, fv, qminus, q3, q31, t31)
+
+    use mpi_gamil
 !------------------------------------------------------------------------------
 ! Coupler for converting physics output variables into dynamics input variables
 !------------------------------Arguments--------------------------------
     type(physics_state),intent(in), dimension(begchunk:endchunk) :: phys_state
     type(physics_tend), intent(in), dimension(begchunk:endchunk) :: phys_tend
 
-    real(r8), intent(out) :: t2(plond, plev, beglat:endlat)        ! temp tendency
-    real(r8), intent(out) :: t31(plond, plev, beglat:endlat)       ! temp (K)
-    real(r8), intent(out) :: q31(plond, plev, beglat:endlat)       ! moisture
-    real(r8), intent(out) :: fu(plond, plev, beglat:endlat)        ! u wind tendency
-    real(r8), intent(out) :: fv(plond, plev, beglat:endlat)        ! v wind tendency
-    real(r8), intent(out) :: qminus(plond, plev, pcnst, beglat:endlat) ! constituents
-    real(r8), intent(out) :: qnats(plond, plev, pcnst+pnats, beglat:endlat) ! non-adv constituents
+    real(r8), intent(out) :: t2(beglonex:endlonex, plev, beglat:endlat)        ! temp tendency
+    real(r8), intent(out) :: t31(beglonex:endlonex, plev, beglat:endlat)       ! temp (K)
+    real(r8), intent(out) :: q31(beglonex:endlonex, plev, beglat:endlat)       ! moisture
+    real(r8), intent(out) :: fu(beglonex:endlonex, plev, beglat:endlat)        ! u wind tendency
+    real(r8), intent(out) :: fv(beglonex:endlonex, plev, beglat:endlat)        ! v wind tendency
+    real(r8), intent(out) :: qminus(beglonex:endlonex, plev, pcnst, beglat:endlat) ! constituents
+    real(r8), intent(out) :: q3(beglonex:endlonex, plev, pcnst+pnats, beglat:endlat) ! non-adv constituents
 !
 !---------------------------Local workspace-----------------------------
     real(r8), allocatable, dimension(:) :: &
-       bbuffer, cbuffer  ,buf1            ! transpose buffers
+       bbuffer, cbuffer              ! transpose buffers
 
     integer :: i,k,j,m,lchnk         ! indices
     integer :: ncol                  ! number of columns in current chunk
@@ -270,7 +269,7 @@ contains
           do m=pcnst+1,pcnst+pnats
              do k=1,plev
                 do i=1,ncol
-                   qnats(lons(i),k,m,lats(i)) = phys_state(lchnk)%q(i,k,m)
+                   q3(lons(i),k,m,lats(i)) = phys_state(lchnk)%q(i,k,m)
                 end do
              end do
           end do
@@ -278,12 +277,10 @@ contains
 
     else
 
-!       tsize = 3 + (pcnst+pnats)
        tsize = 5 + (pcnst+pnats)
 
        allocate(bbuffer(tsize*block_buf_nrecs))
        allocate(cbuffer(tsize*chunk_buf_nrecs))
-       allocate(buf1(tsize*block_buf_nrecs))                !(ljli05-08-12)
        do lchnk = begchunk,endchunk
           ncol = get_ncols_p(lchnk)
 
@@ -301,6 +298,9 @@ contains
                    cbuffer(cpter(i,k)+2+m) = phys_state(lchnk)%q(i,k,m)
                 end do
 
+                cbuffer(cpter(i,k)+2+pcnst+pnats+1)   = phys_state(lchnk)%t1 (i,k)
+                cbuffer(cpter(i,k)+2+pcnst+pnats+2)   = phys_state(lchnk)%q1 (i,k)
+
              end do
 
           end do
@@ -315,6 +315,8 @@ contains
 
           do i=1,nlon(j)
 
+           if (i.ge.ibeg0 .and. i.le.iend0) then
+
              do k=1,plev
 
                 t2(i,k,j) = bbuffer(bpter(i,k))
@@ -326,11 +328,13 @@ contains
                 end do
 
                 do m=pcnst+1,pcnst+pnats
-                   qnats(i,k,m,j)  = bbuffer(bpter(i,k)+2+m)
+                   q3(i,k,m,j)  = bbuffer(bpter(i,k)+2+m)
                 end do
-                t31(i,k,j) = buf1(bpter(i,k)+3+pcnst+pnats)
-                q31(i,k,j) = buf1(bpter(i,k)+4+pcnst+pnats)
+                t31(i,k,j) = bbuffer(bpter(i,k)+3+pcnst+pnats)
+                q31(i,k,j) = bbuffer(bpter(i,k)+4+pcnst+pnats)
              end do
+
+           endif
 
           end do
 
@@ -338,7 +342,6 @@ contains
 
        deallocate(bbuffer)
        deallocate(cbuffer)
-       deallocate(buf1)
 
     endif
 

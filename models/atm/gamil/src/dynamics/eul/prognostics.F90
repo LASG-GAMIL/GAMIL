@@ -19,6 +19,7 @@ module prognostics
    use pmgrid 
    use infnan
    use constituents, only: pcnst, pnats
+   use mpi_gamil, only: beglonex, endlonex
 
    implicit none
 
@@ -53,16 +54,16 @@ CONTAINS
 !
 ! Purpose:  Allocate and initialize the prognostic arrays.
 !
-      allocate (ps    (plond                 ,beglat:endlat    ,ptimelevels))
-      allocate (u3    (plond,plev            ,beglatex:endlatex,ptimelevels))
-      allocate (v3    (plond,plev            ,beglatex:endlatex,ptimelevels))
-      allocate (t3    (plond,plev            ,beglatex:endlatex,ptimelevels))
-      allocate (t31   (plond,plev            ,beglatex:endlatex))
-      allocate (t32   (plond,plev            ,beglatex:endlatex))
-      allocate (q3    (plond,plev,pcnst+pnats,beglatex:endlatex,ptimelevels))
-      allocate (q31   (plond,plev            ,beglatex:endlatex))
-      allocate (q32   (plond,plev            ,beglatex:endlatex))
-      allocate (qminus(plond,plev,pcnst      ,beglatex:endlatex  ))
+      allocate (ps    (beglonex:endlonex                 ,beglat:endlat    ,ptimelevels))
+      allocate (u3    (beglonex:endlonex,plev            ,beglatex:endlatex,ptimelevels))
+      allocate (v3    (beglonex:endlonex,plev            ,beglatex:endlatex,ptimelevels))
+      allocate (t3    (beglonex:endlonex,plev            ,beglatex:endlatex,ptimelevels))
+      allocate (t31   (beglonex:endlonex,plev            ,beglatex:endlatex))
+      allocate (t32   (beglonex:endlonex,plev            ,beglatex:endlatex))
+      allocate (q3    (beglonex:endlonex,plev,pcnst+pnats,beglatex:endlatex,ptimelevels))
+      allocate (q31   (beglonex:endlonex,plev            ,beglatex:endlatex))
+      allocate (q32   (beglonex:endlonex,plev            ,beglatex:endlatex))
+      allocate (qminus(beglonex:endlonex,plev,pcnst      ,beglatex:endlatex  ))
 
 !!    allocate (vort  (plond,plev,beglat:endlat,ptimelevels))   
 !!    allocate (div   (plond,plev,beglat:endlat,ptimelevels))    
@@ -70,8 +71,8 @@ CONTAINS
 !!    allocate (dpsl  (plond,beglat:endlat))        
 !!    allocate (dpsm  (plond,beglat:endlat))        
 !!    allocate (dps   (plond,beglat:endlat))         
-      allocate (phis  (plond,beglat:endlat))        
-      allocate (omga  (plond,plev,beglat:endlat))    
+      allocate (phis  (beglonex:endlonex,beglat:endlat))        
+      allocate (omga  (beglonex:endlonex,plev,beglat:endlat))    
 
       ps(:,:,:)       = inf
       u3(:,:,:,:)     = inf

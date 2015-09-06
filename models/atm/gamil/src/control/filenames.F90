@@ -98,7 +98,7 @@ contains
         end if
 
         if (nrefrq == 1 .and. len_trim(rest_pfile) == 0) then
-            rest_pfile = trim(home_dir)//'/gamil.'//trim(caseid)//'.rpointer'
+            rest_pfile = 'gamil.'//trim(caseid)//'.rpointer'
         end if
         !
         ! Set archive_dir if not initialized, and make sure has trailing "/"

@@ -117,9 +117,9 @@ subroutine stepon
     allocate(phys_state(begchunk:endchunk))
     allocate(phys_state0(begchunk:endchunk)) ! added by WAN Hui
     allocate(phys_tend(begchunk:endchunk))
-    allocate(t2(plond,plev,beglat:endlat))
-    allocate(fu(plond,plev,beglat:endlat))
-    allocate(fv(plond,plev,beglat:endlat))
+    allocate(t2(beglonex:endlonex,plev,beglat:endlat))
+    allocate(fu(beglonex:endlonex,plev,beglat:endlat))
+    allocate(fv(beglonex:endlonex,plev,beglat:endlat))
     !
     ! Beginning of basic time step loop
     !
@@ -154,31 +154,30 @@ subroutine stepon
 
         call t_stopf('stepon_st')
         call t_startf('d_p_coupling')
-        call d_p_coupling(ps(1,beglat,n3m2), t3(i1,1,begj,n3m2), u3(i1,1,begj,n3m2), &
-                          v3(i1,1,begj,n3m2), q3(i1,1,1,begj,n3m2), &
-                          q31(i1,1,begj), t31(i1,1,begj), q32(i1,1,begj), t32(i1,1,begj),&
+        call d_p_coupling(ps(beglonex,beglat,n3m2), t3(beglonex,1,begj,n3m2), u3(beglonex,1,begj,n3m2), &
+                          v3(beglonex,1,begj,n3m2), q3(beglonex,1,1,begj,n3m2), &
+                          q31(beglonex,1,begj), t31(beglonex,1,begj), q32(beglonex,1,begj), t32(beglonex,1,begj),&
                           omga, phis, phys_state)
         call t_stopf('d_p_coupling')
-
         !!(wh, according to P Liu 2003)
         if (is_first_restart_step()) then
             call t_startf('d_p_coupling')
-            call d_p_coupling(ps(1,beglat,n3m2), t3(i1,1,begj,n3m2), u3(i1,1,begj,n3m2), &
-                              v3(i1,1,begj,n3m2), q3(i1,1,1,begj,n3m2), &
-                              q31(i1,1,begj), t31(i1,1,begj), q32(i1,1,begj), t32(i1,1,begj),&!(ljli)
+
+            call d_p_coupling(ps(beglonex,beglat,n3m2), t3(beglonex,1,begj,n3m2), u3(beglonex,1,begj,n3m2), &
+                              v3(beglonex,1,begj,n3m2), q3(beglonex,1,1,begj,n3m2), &
+                              q31(beglonex,1,begj), t31(beglonex,1,begj), q32(beglonex,1,begj), t32(beglonex,1,begj),&!(ljli)
                               omga, phis, phys_state0)
             call t_stopf('d_p_coupling')
         else
             !for Tiedtke scheme
             call t_startf('d_p_coupling')
-            call d_p_coupling(ps(1,beglat,n3), t3(i1,1,begj,n3), u3(i1,1,begj,n3), &
-                              v3(i1,1,begj,n3), q3(i1,1,1,begj,n3), &
-                              q31(i1,1,begj), t31(i1,1,begj), q32(i1,1,begj), t32(i1,1,begj),&!(ljli)
+            call d_p_coupling(ps(beglonex,beglat,n3), t3(beglonex,1,begj,n3), u3(beglonex,1,begj,n3), &
+                              v3(beglonex,1,begj,n3), q3(beglonex,1,1,begj,n3), &
+                              q31(beglonex,1,begj), t31(beglonex,1,begj), q32(beglonex,1,begj), t32(beglonex,1,begj),&!(ljli)
                               omga, phis, phys_state0)
             call t_stopf('d_p_coupling')
         end if
         !!(wh, according to P Liu 2003)
-
         call t_startf('phys_driver')
 
         if (masterproc) then
@@ -202,7 +201,7 @@ subroutine stepon
 
         call t_startf('p_d_coupling')
         call p_d_coupling(phys_state, phys_tend, t2, fu, fv, &
-            qminus(i1,1,1,begj), q3(i1,1,1,begj,n3), q31(i1,1,begj), t31(i1,1,begj))
+            qminus(beglonex,1,1,begj), q3(beglonex,1,1,begj,n3), q31(beglonex,1,begj), t31(beglonex,1,begj))
         call t_stopf('p_d_coupling')
 
         !----------------------------------------------------------

@@ -21,6 +21,8 @@ module restart_physics
 #endif
 
     implicit none
+    
+#include<RK_or_MG.h>
 
     private
     !
@@ -286,12 +288,14 @@ CONTAINS
       end do
       call write_field_from_chunk(nrg,1,1,1,tmpfield)
 
-      kvh_idx = pbuf_get_fld_idx('KVH')
-      do i=begchunk,endchunk
-       ncol = get_ncols_p(i)
-       tmpfield3d2(:ncol,:pverp,i) = pbuf(kvh_idx)%fld_ptr(1,1:ncol,1:pverp,i,1)
-      end do
-      call write_field_from_chunk(nrg,1,pverp,1,tmpfield3d2)
+      if (RK_or_MG=='MG') then
+       kvh_idx = pbuf_get_fld_idx('KVH')
+       do i=begchunk,endchunk
+        ncol = get_ncols_p(i)
+        tmpfield3d2(:ncol,:pverp,i) = pbuf(kvh_idx)%fld_ptr(1,1:ncol,1:pverp,i,1)
+       end do
+       call write_field_from_chunk(nrg,1,pverp,1,tmpfield3d2)
+      endif
 #ifdef COUP_CSM
         call write_restart_ccsm ()
 #endif
@@ -328,6 +332,9 @@ CONTAINS
     !#######################################################################
 
     subroutine read_restart_physics (nrg, nrg2, aeres )
+
+#include<RK_or_MG.h>
+
         !
         ! Arguments
         !
@@ -547,7 +554,10 @@ CONTAINS
       do i=begchunk,endchunk
 	srfflx_parm2d(i)%tref(:) = tmpfield(:,i)
       end do
-      call read_chunk_from_field(nrg,1,pverp,1,fld_kvh)
+
+      if (RK_or_MG=='MG') then
+       call read_chunk_from_field(nrg,1,pverp,1,fld_kvh)
+      endif
 
 #ifdef COUP_CSM
         call initialize_ccsm_msg ()

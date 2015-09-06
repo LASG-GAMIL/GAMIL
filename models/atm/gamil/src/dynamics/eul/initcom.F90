@@ -153,8 +153,7 @@ subroutine initcom
      call initialize_qadv               !!(wh 2003.10.24)
 
      call conpda (dtdy,dx,dy,sinu,wtgv(begj),dsig,-1.0d0,isor,iord   &
-                          ,ipq,dsnp,dssp,gc,dtdlt,dtdln,dtdsg) 
-
+                          ,ipq,dsnp,dssp,gc,dtdlt,dtdln,dtdsg)
 !
 ! Set minimum mixing ratio for moisture and advected tracers
 !

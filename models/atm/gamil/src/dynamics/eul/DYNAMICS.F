@@ -51,8 +51,16 @@
 !     Parallelized by Xin Zhang, translated to F90 by Pu Ye.
 !
 !---------------------------------------------------------------------------------
-        implicit none
+        use comfm1, only: P, C0, PLY, CB, DCB, TB, CB0, NIGW, UU, VV, TT, DPS0
+        use comfm1, only: DPS1, HPS, PSK, DPS, UK, VK, TTK, DU, DV, DTT, DU1, DV1
+        use comfm1, only: DTT1, UUK, HHK, DUS
+        use mpi_gamil, only: beglonex,endlonex, ibeg0, jbeg0, ibeg1, iend1, jbeg0, jend0, jbeg1, jend1
+        use mpi_gamil, only: gamil_arrays_comm, gamil_min_lat_row_data
+        use mpi_gamil, only: COMM_TO_LEFT, COMM_TO_RIGHT
+        use pmgrid, only: beglatexdyn, endlatexdyn, plat
 
+        implicit none
+                          
 #include <PARADYN>
 
 #if (defined SPMD)
@@ -67,7 +75,7 @@
         real*8   SIGL(NL )      !  half-move vertical layers (sigma(k+1/2)) (unit: 1)
         real*8  DSIG(NL )      !  vertical stepsizes (unit: 1)
 
-        real*8   HS(NX,NY)      !  geopotential of the ground elevation  (unit: m^2/s^2)
+        real*8   HS(beglonex:endlonex,beglatexdyn:endlatexdyn)      !  geopotential of the ground elevation  (unit: m^2/s^2)
         real*8   DTDY           !  time stepsize      (unit: s)
 
         INTEGER*4  ITIME    !  integrated time
@@ -76,24 +84,24 @@
 
 ! 2) INPUT ARRAYS:SU,SV,ST
 
-        real*8  SU(NX,NY,NL)  !  the forcing on u
-        real*8  SV(NX,NY,NL)  !  the forcing on v
-        real*8  ST(NX,NY,NL)  !  the forcing on T
+        real*8  SU(beglonex:endlonex,beglatexdyn:endlatexdyn,NL)  !  the forcing on u
+        real*8  SV(beglonex:endlonex,beglatexdyn:endlatexdyn,NL)  !  the forcing on v
+        real*8  ST(beglonex:endlonex,beglatexdyn:endlatexdyn,NL)  !  the forcing on T
 
 
 ! 3) BOTH INPUT AND OUTPUT ARRAYS: US, VS, PS, TS
 
-        real*8  US (NX,NY,NL )  !  zonal wind        (unit: m/s)
-        real*8  VS (NX,NY,NL )  !  meridional wind   (unit: m/s)
-        real*8  TS (NX,NY,NL)   !  Temperature       (unit: K  )
-        real*8  PS (NX,NY   )   !  Surface pressure  (unit: hPa)
+        real*8  US (beglonex:endlonex,beglatexdyn:endlatexdyn,NL )  !  zonal wind        (unit: m/s)
+        real*8  VS (beglonex:endlonex,beglatexdyn:endlatexdyn,NL )  !  meridional wind   (unit: m/s)
+        real*8  TS (beglonex:endlonex,beglatexdyn:endlatexdyn,NL)   !  Temperature       (unit: K  )
+        real*8  PS (beglonex:endlonex,beglatexdyn:endlatexdyn   )   !  Surface pressure  (unit: hPa)
 
 ! 4) OUTPUT ARRAYS ONLY: WS, W0, H, DPS
 
-        real*8  WS (NX,NY,NZ)  !  diagnosed vertical velocity at the present step (unit: 1/s)
-        real*8  W0 (NX,NY,NL)  !  diagnosed vertical velocity at the previous step (unit: 1/s)
-        real*8  H  (NX,NY,NZ)  !  diagnosed geopotential height (unit: m^2/s^2)
-        real*8  DP (NX,NY   )  !  the tendency of the surface pressure (unit: hPa/s)
+        real*8  WS (beglonex:endlonex,beglatexdyn:endlatexdyn,NZ)  !  diagnosed vertical velocity at the present step (unit: 1/s)
+        real*8  W0 (beglonex:endlonex,beglatexdyn:endlatexdyn,NL)  !  diagnosed vertical velocity at the previous step (unit: 1/s)
+        real*8  H  (beglonex:endlonex,beglatexdyn:endlatexdyn,NZ)  !  diagnosed geopotential height (unit: m^2/s^2)
+        real*8  DP (beglonex:endlonex,beglatexdyn:endlatexdyn   )  !  the tendency of the surface pressure (unit: hPa/s)
 
 
 ! 5) WORKING VARIABLES AND ARRAYS:
@@ -109,42 +117,42 @@
 !   (5-3) FOR STANDARD ATMOSPHERE AT THE SIGMA-LAYERS  ! in module comfm2
 
 !   (5-4) SURFACE VARIBALES
-        real*8  PSB(NX,NY  )   !  Surface pressure of the standard atmopshere  (unit: hPa)
-        real*8  TSB(NX,NY  )   !  Surface temperature of the standard atmopshere (unit: K  )
+        real*8  PSB(beglonex:endlonex,beglatexdyn:endlatexdyn  )   !  Surface pressure of the standard atmopshere  (unit: hPa)
+        real*8  TSB(beglonex:endlonex,beglatexdyn:endlatexdyn  )   !  Surface temperature of the standard atmopshere (unit: K  )
 
 !   (5-5) FOR FELXIBLE LEAPING-POINT ZONAL DIFFERENCE  ! in module commap
-        integer  MM1(NX,NY)     !    MM1=i-MDJ      , if MM1<2, MM1=NX-2+MM1
-        integer  MP1(NX,NY)     !    MP1=i+MDJ      , if MP1>NX-1, MP1=MP1-NX+2
-        integer  MM2(NX,NY)     !    MM2=i-(MDJ-1)/2, if MM2<2, MM2=NX-2+MM2
-        integer  MP2(NX,NY)     !    MP2=i+(MDJ+1)/2, if MP2>NX-1, MP2=MP2-NX+2
-        integer  MM3(NX,NY)     !    MM3=i-(MDJ+1)/2, if MM3<2, MM3=NX-2+MM3
-        integer  MP3(NX,NY)     !    MP3=i+(MDJ-1)/2, if MP3>NX-1, MP3=MP3-NX+2
-        integer  MDJ(NY)        !    leaping span of the difference
+        integer  MM1(beglonex:endlonex,beglatexdyn:endlatexdyn)     !    MM1=i-MDJ      , if MM1<2, MM1=NX-2+MM1
+        integer  MP1(beglonex:endlonex,beglatexdyn:endlatexdyn)     !    MP1=i+MDJ      , if MP1>NX-1, MP1=MP1-NX+2
+        integer  MM2(beglonex:endlonex,beglatexdyn:endlatexdyn)     !    MM2=i-(MDJ-1)/2, if MM2<2, MM2=NX-2+MM2
+        integer  MP2(beglonex:endlonex,beglatexdyn:endlatexdyn)     !    MP2=i+(MDJ+1)/2, if MP2>NX-1, MP2=MP2-NX+2
+        integer  MM3(beglonex:endlonex,beglatexdyn:endlatexdyn)     !    MM3=i-(MDJ+1)/2, if MM3<2, MM3=NX-2+MM3
+        integer  MP3(beglonex:endlonex,beglatexdyn:endlatexdyn)     !    MP3=i+(MDJ-1)/2, if MP3>NX-1, MP3=MP3-NX+2
+        integer  MDJ(beglatexdyn:endlatexdyn)        !    leaping span of the difference
 
 !   (5-6) FOR EVEN-AREA MERIDIONAL PARTITION
-        real*8  WTGU(NY)       !    area weighting at the normal grid    (unit: 1)
-        real*8  WTGV(NY)       !    area weighting at the half-move grid (unit: 1)
+        real*8  WTGU(beglatexdyn:endlatexdyn)       !    area weighting at the normal grid    (unit: 1)
+        real*8  WTGV(beglatexdyn:endlatexdyn)       !    area weighting at the half-move grid (unit: 1)
         real*8  DY             !    meridional stepsize in computing mesh
 
 !   (5-7) TENDENCIES                                   ! in module comfm2
 
 !   (5-8) OTHERS
         real*8  DX             !  input constant (unit: s)
-        real*8  SINU(NY)       !  input constant, sin(theta) at INTEGER grid j
-        real*8  SINV(NY)       !  input constant, sin(theta) at half grid j+1/2
-        real*8  OUX (NY)       !  input constant, OUX=1/(RAD*SINU*DX*MDJ)
-        real*8 OVX (NY)       !  input constant, OUX=1/(RAD*SINV*DX*MDJ)
-        real*8  OUY (NY)       !  input constant, OUY=1/(RAD*SINU*DY*WTGU)
-        real*8  OVY (NY)       !  input constant, OUY=1/(RAD*SINV*DY*WTGU)
-        real*8  FF  (NY)       !  input constant
-        real*8  CUR (NY)       !  input constant
+        real*8  SINU(beglatexdyn:endlatexdyn)       !  input constant, sin(theta) at INTEGER grid j
+        real*8  SINV(beglatexdyn:endlatexdyn)       !  input constant, sin(theta) at half grid j+1/2
+        real*8  OUX (beglatexdyn:endlatexdyn)       !  input constant, OUX=1/(RAD*SINU*DX*MDJ)
+        real*8 OVX (beglatexdyn:endlatexdyn)       !  input constant, OUX=1/(RAD*SINV*DX*MDJ)
+        real*8  OUY (beglatexdyn:endlatexdyn)       !  input constant, OUY=1/(RAD*SINU*DY*WTGU)
+        real*8  OVY (beglatexdyn:endlatexdyn)       !  input constant, OUY=1/(RAD*SINV*DY*WTGU)
+        real*8  FF  (beglatexdyn:endlatexdyn)       !  input constant
+        real*8  CUR (beglatexdyn:endlatexdyn)       !  input constant
 
-        real*8  WK0,WK5,WK6,BYY1,BYY2,BYY3,DT2,TE,TM,TMS
-        real*8  UUK(NX,NY),HHK(NX,NY),DUS(NX,NY),DPS2(NX,NY)
+        real*8  WK0,WK5,WK6,BYY1,BYY2,BYY3,DT2,TE,TM
+        real*8  DPS2(beglonex:endlonex,beglatexdyn:endlatexdyn)
         real*8  INNER
-        real*8  FAC(nx,ny,nz),FBC(nx,ny,nl)
+        real*8  FAC(beglonex:endlonex,beglatexdyn:endlatexdyn,nz),FBC(beglonex:endlonex,beglatexdyn:endlatexdyn,nl)
+        real*8  TMS(beglatexdyn:endlatexdyn), TMS_BUF(16,beglatexdyn:endlatexdyn)
         integer  I,J,K,KPP,KWB
-        integer  begj,endj
 
         EXTERNAL INNER
 
@@ -152,14 +160,6 @@
 ! AS FOLLOWS, THE IMPROVED LEAP-FROG AND THE REGENERATION OF
 ! VARIABLES WILL BE FINISHED IN THE SAME CYCLES.
 !--------------------------------------------------------------------------
-
-#if (defined SPMD)
-        begj = 2
-        endj = ny-1
-#else
-        begj = 1
-        endj = ny
-#endif
 
         DT2=0.5D0*DTDY
 !
@@ -176,31 +176,41 @@
 !	DLT1=0.0d0
 !	DLT2=0.0d0
 !
-        DO J=begj,endj
-	   PS(1,J)=PS(NX-1,J)
-	   PS(NX,J)=PS(2,J)
-	   TMS=0.0
-           DO I=1,nx
-	     P (I,J)=SQRT(PS(I,J))
-	     C0(I,J)=SQRT(RD*TSB(I,J)/PSB(I,J))
-             DO K=1,nl
-               PLY(I,J,K) = PS(I,J)*SIGL(K) + PMTOP
-               WK5=PLY(I,J,K)/DPALIB
-               KPP=INT(WK5)
-               WK6=WK5-DFLOAT(KPP)
-               CB(I,J,K)=(1.D0-WK6)*CBB(KPP)+WK6*CBB(KPP+1)
-               DCB(I,J,K)=(1.D0-WK6)*DCBB(KPP)+WK6*DCBB(KPP+1)
-               TB(I,J,K)=(1.D0-WK6)*TBB(KPP)+WK6*TBB(KPP+1)
-               CB0(I,J,K)=CB(I,J,K)*P(I,J)/PLY(I,J,K)
-               WK5=CB0(I,J,K)*P(I,J)*DSIG(K)
-               IF (TMS.LT.WK5) TMS=WK5
-             ENDDO
-           ENDDO
-           KPP=DTDY*TMS*OUX(J)*2.0+0.0001
-           NIGW(J)=KPP+1
-!
-         ENDDO
+      call gamil_arrays_comm(COMM_TO_LEFT,1,PS(:,beglatexdyn)) 
+      call gamil_arrays_comm(COMM_TO_RIGHT,1,PS(:,beglatexdyn)) 
 
+!$OMP PARALLEL DO PRIVATE (I,J,K,WK5,KPP,WK6)
+        DO J=jbeg0,jend0
+	      TMS_BUF(1,J)=0.0
+          DO I=beglonex,endlonex
+	        P (I,J)=SQRT(PS(I,J))
+	        C0(I,J)=SQRT(RD*TSB(I,J)/PSB(I,J))
+          ENDDO
+          DO K=1,nl
+            DO I=beglonex,endlonex
+              PLY(I,J,K) = PS(I,J)*SIGL(K) + PMTOP
+              WK5=PLY(I,J,K)/DPALIB
+              KPP=INT(WK5)
+              WK6=WK5-DFLOAT(KPP)
+              CB(I,J,K)=(1.D0-WK6)*CBB(KPP)+WK6*CBB(KPP+1)
+              DCB(I,J,K)=(1.D0-WK6)*DCBB(KPP)+WK6*DCBB(KPP+1)
+              TB(I,J,K)=(1.D0-WK6)*TBB(KPP)+WK6*TBB(KPP+1)
+              CB0(I,J,K)=CB(I,J,K)*P(I,J)/PLY(I,J,K)
+              WK5=CB0(I,J,K)*P(I,J)*DSIG(K)
+              IF (TMS_BUF(1,J).LT.WK5) TMS_BUF(1,J)=WK5
+            ENDDO
+          ENDDO
+        ENDDO
+
+        DO J=jbeg0,jend0
+          TMS(J)=TMS_BUF(1,J)
+        ENDDO
+        call gamil_min_lat_row_data(TMS(jbeg0:),jend0-jbeg0+1)
+
+        DO J=jbeg0,jend0
+           KPP=DTDY*TMS(J)*OUX(J)*2.0+0.0001
+           NIGW(J)=KPP+1
+         ENDDO
 !
         CALL IAPTRSF(US,VS,WS,PS,TS,UU,VV,P,TT,TB,CB,1)
 !
@@ -211,48 +221,40 @@
         CALL DIAG(UU,VV,P,PS,PLY,TT,US,VS,TS,H
      _           ,HPS,PMTOP,PSB,TSB,TB,CB,FAC,DSIG)
 !
+!$OMP PARALLEL DO PRIVATE(I,J,K)
 	DO K=1,nl
-	DO J=begj,endj
-	DO I=1,nx
-	   W0(I,J,K)=WS(I,J,K)
+	DO J=jbeg0,jend0
+	DO I=beglonex,endlonex
+	   w0(I,J,K)=WS(I,J,K)
 	END DO
 	END DO
 	END DO
 !
 	END IF
 
-
 !
-        DO J=begj,endj
-        DO I=1,NX
+!$OMP PARALLEL DO PRIVATE(I,J,K)
+        DO J=jbeg0,jend0
+        DO I=beglonex,endlonex
            PSK(I,J)=PS(I,J)
            DPS(I,J)=DPS0(I,J)+DPS1(I,J)
         ENDDO
-        ENDDO
-!
         DO K=1,NL
-        DO J=begj,endj
-        DO I=1,NX
+        DO I=beglonex,endlonex
            UK (I,J,K)=UU(I,J,K)
            VK (I,J,K)=VV(I,J,K)
            TTK(I,J,K)=TT(I,J,K)
         ENDDO
         ENDDO
-        ENDDO
-!
-#if (defined SPMD)
-        DO J=jbeg,jend
-#else
-        DO J=2,NY-1
-#endif
-           DO I=2,NX-1
-              HHK(I,J)=C0(I,J)*(PS(I,J)+PMTOP-PSB(I,J))
-              UUK(I,J)=0.0d0
-              DO K=1,NL
-                 UUK(I,J)=UUK(I,J)+UU(I,J,K)*DSIG(K)
-              ENDDO
+        DO I=beglonex,endlonex
+           HHK(I,J)=C0(I,J)*(PS(I,J)+PMTOP-PSB(I,J))
+           UUK(I,J)=0.0d0
+           DO K=1,NL
+             UUK(I,J)=UUK(I,J)+UU(I,J,K)*DSIG(K)
            ENDDO
         ENDDO
+        ENDDO
+
 !
         DO KWB=1,2
 !
@@ -260,6 +262,7 @@
 ! CALCULATING DU/DT, DV/DT AND DTT/DT.
 !  FORMING THE FACTORS OUT OF ALL THE CYCLES AND CLEANING SOME SPECIAL ARRAIES.
 !-------------------------------------------------------------------------------
+        
         CALL DIFUVT(UU,US,VV,VS,WS,P,PS,PLY,DPS,TT,H,HPS,CB,DCB
      _           ,SIGL,DSIG,DY,OUX,OVX,OUY,OVY,SINV,FF
      _           ,CUR,DLT1,DLT2,MP1,MP2,MP3,MM1,MM2,MM3,WTGV
@@ -267,36 +270,32 @@
 !
         CALL SEMIU(UUK,HHK,P,DU,DPS1,DUS,DPS0,DTDY,OUX,DSIG,C0)
 
-!
-        DO J=begj,endj
-        DO I=1,NX
+!$OMP PARALLEL 
+!$OMP DO PRIVATE (I,J,K,WK5,KPP,WK6)
+        DO J=jbeg0,jend0
+        DO I=beglonex,endlonex
            DPS2(I,J)=DPS1(I,J)+DPS0(I,J)
            PS (I,J)=PSK (I,J)+DT2*DPS2(I,J)
         ENDDO
-        ENDDO
 !
-        !write(*,*) "dynamics_sxj_2"
         DO K=1,nl
-        DO J=begj,endj
-        DO I=1,nx
+        DO I=beglonex,endlonex
            DU(I,J,K)=DU (I,J,K)+    DUS(I,J  )
-           TT(I,J,K)=TTK(I,J,K)+DT2*DTT(I,J,K)
            UU(I,J,K)=UK (I,J,K)+DT2*DU (I,J,K)
+           TT(I,J,K)=TTK(I,J,K)+DT2*DTT(I,J,K)
            VV(I,J,K)=VK (I,J,K)+DT2*DV (I,J,K)
-!
            PLY(I,J,K) = PS(I,J)*SIGL(K) + PMTOP
            WK5=PLY(I,J,K)/DPALIB
            KPP=INT(WK5)
            WK6=WK5-DFLOAT(KPP)
            CB(I,J,K)=(1.D0-WK6)*CBB(KPP)+WK6*CBB(KPP+1)
            DCB(I,J,K)=(1.D0-WK6)*DCBB(KPP)+WK6*DCBB(KPP+1)
-	     CB0(I,J,K)=CB(I,J,K)*P(I,J)/PLY(I,J,K)
-!          DU(I,J,K)=DUS(I,J)
-!          DV(I,J,K)=0.0
-!          DTT(I,J,K)=0.0
+	   CB0(I,J,K)=CB(I,J,K)*P(I,J)/PLY(I,J,K)
         ENDDO
         ENDDO
         ENDDO
+!$OMP END PARALLEL
+
 !
 !	BYY2=INNER(DU,DV,DTT,DPS0,0,UU,VV,TT,PS,1
 !    _             ,DSIG,TSB,PSB,PMTOP,SINU,SINV,WTGU,WTGV)
@@ -305,9 +304,9 @@
        ! write(*,*) "dynamics_sxj_3"
 !
         IF (KWB.LT.2) THEN
-!
-        DO J=begj,endj
-        DO I=1,NX
+!$OMP PARALLEL DO PRIVATE (I,J)
+        DO J=jbeg0,jend0
+        DO I=beglonex,endlonex
            P  (I,J)=SQRT(PS(I,J))
         ENDDO
         ENDDO
@@ -320,8 +319,9 @@
         CALL DIAG(UU,VV,P,PS,PLY,TT,US,VS,TS,H
      _           ,HPS,PMTOP,PSB,TSB,TB,CB,FAC,DSIG)
 !
-        DO J=begj,endj
-        DO I=1,NX
+!$OMP PARALLEL DO PRIVATE (I,J)
+        DO J=jbeg0,jend0
+        DO I=beglonex,endlonex
            DPS (I,J)=DPS0(I,J)+DPS1(I,J)
         ENDDO
         ENDDO
@@ -339,35 +339,40 @@
      _           ,CUR,DLT1,DLT2,MP1,MP2,MP3,MM1,MM2,MM3,WTGV
      _           ,DU1,DV1,DTT1,SU,SV,ST,FBC)
 !
+!$OMP PARALLEL 
+!$OMP DO PRIVATE (I,J,K)
         DO K=1,nl
-#if (defined SPMD)
-        DO J=jbeg,jend
-#else
-        DO J=2,ny-1
-#endif
-          DO I=1,nx
+        DO J=jbeg0,jend0
+          DO I=beglonex,endlonex
              DU1(I,J,K)=DU1(I,J,K)+DUS(I,J)
           ENDDO
         ENDDO
         END DO
+!$OMP END DO NOWAIT
 !
-        DO J=begj,endj
-        DO I=1,nx
+!$OMP DO PRIVATE (I,J)
+        DO J=jbeg0,jend0
+        DO I=beglonex,endlonex
            DPS1(I,J)=DPS (I,J)
            DPS (I,J)=DPS2(I,J)
         ENDDO
         ENDDO
+!$OMP END PARALLEL
+
 !
 !     To deduct the inner gravity waves from the tendences of the zonal wind
 !     and the temperature during the long-time-stepsize integrations
 !
        CALL MINUS_INGW(UU,P,TT,CB0,DSIG,OUX,DU1,DTT1,NIGW)
+
 !
         BYY1=INNER(DU1,DV1,DTT1,DPS1,0,DU ,DV ,DTT ,DPS ,0
      _            ,DSIG,TSB,PSB,PMTOP,SINU,SINV,WTGU,WTGV)
+
 !
-        DO J=begj,endj
-        DO I=1,nx
+!$OMP PARALLEL DO PRIVATE (I,J)
+        DO J=jbeg0,jend0
+        DO I=beglonex,endlonex
            PS(I,J)=PSK(I,J)+DT2*DPS1(I,J)
            P(I,J)=SQRT(PS(I,J))
         ENDDO
@@ -383,15 +388,16 @@
 
         DT2=DTDY*BYY1/BYY3
 
-        DO J=begj,endj
-        DO I=1,nx
+!$OMP PARALLEL DO PRIVATE (I,J,K,WK5,KPP,WK6)
+        DO J=jbeg0,jend0
+        DO I=beglonex,endlonex
            PS(I,J)=PSK(I,J)+DT2*DPS1(I,J)
            P(I,J)=SQRT(PS(I,J))
         ENDDO
 !
-	TMS=0.0
+	    TMS_BUF(1,J)=0.0
         DO K=1,nl
-        DO I=1,nx
+        DO I=beglonex,endlonex
            PLY(I,J,K) = PS(I,J)*SIGL(K) + PMTOP
            WK5=PLY(I,J,K)/DPALIB
            KPP=INT(WK5)
@@ -401,18 +407,26 @@
            DCB(I,J,K)=(1.D0-WK6)*DCBB(KPP)+WK6*DCBB(KPP+1)
            CB0(I,J,K)=CB(I,J,K)*P(I,J)/PLY(I,J,K)
            WK5=CB0(I,J,K)*P(I,J)*DSIG(K)
-           IF (TMS.LT.WK5) TMS=WK5
-!
+           IF (TMS_BUF(1,J).LT.WK5) TMS_BUF(1,J)=WK5
            TT(I,J,K)=TTK(I,J,K)+DT2*DTT1(I,J,K)
            UU(I,J,K)=UK (I,J,K)+DT2*DU1 (I,J,K)
            VV(I,J,K)=VK (I,J,K)+DT2*DV1 (I,J,K)
         ENDDO
         ENDDO
-!
-        KPP=DTDY*TMS*OUX(J)*2.0+0.0001
-        NIGW(J)=KPP+1
-!
         ENDDO
+!
+        DO J=jbeg0,jend0
+          TMS(J)=TMS_BUF(1,J)
+        ENDDO
+        call gamil_min_lat_row_data(TMS(jbeg0:),jend0-jbeg0+1)
+
+        DO J=jbeg0,jend0
+        KPP=DTDY*TMS(J)*OUX(J)*2.0+0.0001
+        NIGW(J)=KPP+1
+        ENDDO
+
+
+
  	I=ITIME
         k=i/86400
 !!**  	IF (K*86400.EQ.I) THEN
@@ -452,10 +466,12 @@
         CALL DIAG(UU,VV,P,PS,PLY,TT,US,VS,TS,H
      _           ,HPS,PMTOP,PSB,TSB,TB,CB,FAC,DSIG)
 !
-        DO J=begj,endj
-        DO I=1,nx
+!$OMP PARALLEL DO PRIVATE (I,J)
+        DO J=jbeg0,jend0
+        DO I=beglonex,endlonex
  	   DP(I,J)=DPS0(I,J)+DPS1(I,J)
  	END DO
  	END DO
+
       RETURN
       END

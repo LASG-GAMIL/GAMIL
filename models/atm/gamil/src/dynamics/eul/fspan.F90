@@ -5,6 +5,7 @@ module fspan
 
 !!  use shr_kind_mod, only: r8 => shr_kind_r8, i8 => shr_kind_i8
   use pmgrid, only:  plond,beglatexdyn, endlatexdyn
+  use mpi_gamil
   use infnan
 
   implicit none
@@ -22,12 +23,12 @@ CONTAINS
    subroutine initialize_fspan
       
       allocate (mdj (beglatexdyn:endlatexdyn))
-      allocate (mm1 (plond,beglatexdyn:endlatexdyn))
-      allocate (mp1 (plond,beglatexdyn:endlatexdyn))
-      allocate (mm2 (plond,beglatexdyn:endlatexdyn))
-      allocate (mp2 (plond,beglatexdyn:endlatexdyn))
-      allocate (mm3 (plond,beglatexdyn:endlatexdyn))
-      allocate (mp3 (plond,beglatexdyn:endlatexdyn))
+      allocate (mm1 (beglonex:endlonex,beglatexdyn:endlatexdyn))
+      allocate (mp1 (beglonex:endlonex,beglatexdyn:endlatexdyn))
+      allocate (mm2 (beglonex:endlonex,beglatexdyn:endlatexdyn))
+      allocate (mp2 (beglonex:endlonex,beglatexdyn:endlatexdyn))
+      allocate (mm3 (beglonex:endlonex,beglatexdyn:endlatexdyn))
+      allocate (mp3 (beglonex:endlonex,beglatexdyn:endlatexdyn))
 
 
       mdj (:)   = bigint 

@@ -2,30 +2,112 @@
 #include <params.h>
 
 module binary_io
-    !----------------------------------------------------------------------- 
-    ! 
-    ! Purpose: wrapper routines for integer, real, SPMD, and non-SPMD binary IO
-    ! 
-    ! Author: 
-    ! 
-    !-----------------------------------------------------------------------
-    use shr_kind_mod, only: r8 => shr_kind_r8, r4 => shr_kind_r4
-    use pmgrid
+
+  use shr_kind_mod, only: r8 => shr_kind_r8, r4 => shr_kind_r4
+  use pmgrid
 #if ( defined SPMD )
-    use spmd_dyn, only: npes, nlat_p, compute_gsfactors, compute_gsfactors_dyn
-    use mpishorthand
+  use spmd_dyn,  only: npes, compute_gsfactors, compute_gsfactors_dyn
+  use mpi_gamil, only: nlat_each_proc
+  use mpishorthand
 #endif
 
 contains
 
-    subroutine wrtout_r8(iu, arr, numperlat)
-        !----------------------------------------------------------------------- 
-        ! 
-        ! Purpose: 
-        ! Wrapper routine to write restart binary file 
-        ! 
-        ! Author: 
-        ! 
+  subroutine wrtout_2D_array_dyn(iu, ibeg, iend, jbeg, jend, array)
+
+    use mpi_gamil, only: gamil_gather_2D_array, is_rootproc
+
+    implicit none
+
+    real(r8), intent(in):: array(ibeg:iend,jbeg:jend)
+    integer, intent(in) :: iu
+    integer, intent(in) :: ibeg, iend, jbeg, jend
+
+    integer ioerr
+    real(r8) global_array(plond,plat)
+
+    call gamil_gather_2D_array(array, ibeg, iend, jbeg, jend, global_array)
+
+    if (is_rootproc) then
+      write(iu, iostat=ioerr) global_array
+      if (ioerr /= 0) then
+        write(6, "('Error: binary_io::wrtout_2D_array_dyn: ioerror ', i, ' on i/o unit ', i)") ioerr, iu
+        call endrun
+      end if
+    end if
+
+  end subroutine wrtout_2D_array_dyn
+
+  subroutine wrtout_3D_array_dyn(iu, ibeg, iend, jbeg, jend, kbeg, kend, array)
+
+    use mpi_gamil, only: gamil_gather_3D_array, is_rootproc, myproc_id
+
+    implicit none
+
+    real(r8), intent(in):: array(ibeg:iend,jbeg:jend,kbeg:kend)
+    integer, intent(in) :: iu
+    integer, intent(in) :: ibeg, iend, jbeg, jend, kbeg, kend
+
+    integer ioerr
+    real(r8) global_array(plond,plat,kbeg:kend)
+
+    call gamil_gather_3D_array(array, ibeg, iend, jbeg, jend, kbeg, kend, global_array)
+
+    if (is_rootproc) then
+      write(iu, iostat=ioerr) global_array
+      if (ioerr /= 0) then
+        write(6, "('Error: binary_io::wrtout_3D_array_dyn: ioerror ', i, ' on i/o unit ', i)") ioerr, iu
+        call endrun
+      end if
+    end if
+
+  end subroutine wrtout_3D_array_dyn
+
+  subroutine readin_3D_array_dyn(iu, ibeg, iend, jbeg, jend, kbeg, kend, array, exchange)
+
+    use mpi_gamil
+
+    implicit none
+
+    real(r8), intent(out):: array(ibeg:iend,jbeg:jend,kbeg:kend)
+    integer, intent(in) :: iu
+    integer, intent(in) :: ibeg, iend, jbeg, jend, kbeg, kend
+    logical, intent(in) :: exchange
+
+    integer ioerr
+    real(r8) global_array(plond,plat,kbeg:kend)
+
+    if (is_rootproc) then
+      read(iu,iostat=ioerr) global_array
+      if (ioerr /= 0) then
+        write(6, "('Error: binary_io::readin_3D_array_dyn: ioerror ', i, ' on i/o unit ', i)") ioerr, iu
+        call endrun
+      end if
+    end if
+
+    call gamil_scatter_3D_array(global_array, ibeg, iend, jbeg, jend, kbeg, kend, array)
+
+    call register_comm_array(ibeg,iend,jbeg,jend,kbeg,kend,1,1,array(:,jbeg,kbeg))
+    if (exchange) then
+      call gamil_arrays_comm(COMM_TO_LEFT,  1, array(:,jbeg,kbeg))
+      call gamil_arrays_comm(COMM_TO_RIGHT, 1, array(:,jbeg,kbeg))
+      call gamil_arrays_comm(COMM_TO_BOT,   1, array(:,jbeg,kbeg))
+      call gamil_arrays_comm(COMM_TO_TOP,   1, array(:,jbeg,kbeg))
+    else
+      call gamil_arrays_comm(COMM_ROTATE_LEFT, 2, array(:,jbeg,kbeg))
+    endif
+    call remove_comm_array(array(:,jbeg,kbeg))
+
+  end subroutine readin_3D_array_dyn
+
+  subroutine wrtout_r8(iu, arr, numperlat)
+        !-----------------------------------------------------------------------
+        !
+        ! Purpose:
+        ! Wrapper routine to write restart binary file
+        !
+        ! Author:
+        !
         !-----------------------------------------------------------------------
         !
         ! Arguments
@@ -40,7 +122,7 @@ contains
         integer ioerr
 
 #if ( defined SPMD )
-        real(r8), allocatable :: bufres(:) 
+        real(r8), allocatable :: bufres(:)
 
         integer numrecv(0:npes-1)! number of items to be received
         integer displs(0:npes-1) ! displacement array
@@ -54,7 +136,7 @@ contains
         if (masterproc) then
             isiz = 0
             do p = 0, npes-1
-                isiz = isiz+numperlat*nlat_p(p)
+                isiz = isiz+numperlat*nlat_each_proc(p+1)
             end do
         else
             isiz = 1
@@ -137,8 +219,7 @@ contains
         if (masterproc) then
             isiz = 0
             do p = 0, npes-1
-                !!          isiz = isiz + numperlat*nlat_p(p)
-                isiz = isiz + mx*mz*nlat_p(p)
+                isiz = isiz+mx*mz*nlat_each_proc(p+1)
             end do
         else
             isiz = 1
@@ -171,13 +252,13 @@ contains
     !###############################(wanhui)###############################
 
     subroutine wrtout_r4 (iu, arr, numperlat)
-        !----------------------------------------------------------------------- 
-        ! 
-        ! Purpose: 
-        ! Wrapper routine to write restart binary file 
-        ! 
-        ! Author: 
-        ! 
+        !-----------------------------------------------------------------------
+        !
+        ! Purpose:
+        ! Wrapper routine to write restart binary file
+        !
+        ! Author:
+        !
         !-----------------------------------------------------------------------
         !
         ! Arguments
@@ -192,7 +273,7 @@ contains
         integer ioerr              ! errorcode
 
 #if ( defined SPMD )
-        real(r4), allocatable :: bufres(:) 
+        real(r4), allocatable :: bufres(:)
 
         integer :: numrecv(0:npes-1)! number of items to be received
         integer :: displs(0:npes-1) ! displacement array
@@ -205,7 +286,7 @@ contains
         if (masterproc) then
             isiz = 0
             do p=0,npes-1
-                isiz = isiz + numperlat*nlat_p(p)
+                isiz = isiz + numperlat*nlat_each_proc(p+1)
             end do
             allocate (bufres(isiz))
         end if
@@ -238,14 +319,14 @@ contains
     !#######################################################################
 
     subroutine wrtout_int (iu, arr, numperlat)
-        !----------------------------------------------------------------------- 
-        ! 
-        ! Purpose: 
-        ! Wrapper routine to write restart binary file 
-        ! 
-        ! Author: 
-        ! 
-        !----------------------------------------------------------------------- 
+        !-----------------------------------------------------------------------
+        !
+        ! Purpose:
+        ! Wrapper routine to write restart binary file
+        !
+        ! Author:
+        !
+        !-----------------------------------------------------------------------
         !
         ! Arguments
         !
@@ -258,7 +339,7 @@ contains
         integer ioerr              ! errorcode
 
 #if ( defined SPMD )
-        integer, allocatable :: bufres(:) 
+        integer, allocatable :: bufres(:)
         integer :: isiz
         integer :: p
         integer :: numsend          ! number of items to be sent
@@ -268,7 +349,7 @@ contains
         if (masterproc) then
             isiz = 0
             do p=0,npes-1
-                isiz = isiz + numperlat*nlat_p(p)
+                isiz = isiz + numperlat*nlat_each_proc(p+1)
             end do
             allocate (bufres(isiz))
         end if
@@ -351,8 +432,8 @@ contains
         if (masterproc) then
             isiz = 0
             do p=0,npes-1
-                !!          isiz = isiz + numperlat*nlat_p(p)
-                isiz = isiz + mx*mz*nlat_p(p)
+                !!          isiz = isiz + numperlat*nlat_each_proc(p+1)
+                isiz = isiz + mx*mz*nlat_each_proc(p+1)
             end do
         else
             isiz = 1
@@ -391,13 +472,13 @@ contains
     !#######################################################################
 
     subroutine readin_r8 (iu, arr, numperlat)
-        !----------------------------------------------------------------------- 
-        ! 
-        ! Purpose: 
-        ! Wrapper routine to read binary file 
-        ! 
-        ! Author: 
-        ! 
+        !-----------------------------------------------------------------------
+        !
+        ! Purpose:
+        ! Wrapper routine to read binary file
+        !
+        ! Author:
+        !
         !-----------------------------------------------------------------------
         !
         ! Arguments
@@ -412,7 +493,7 @@ contains
         integer ioerr              ! errorcode
 
 #if ( defined SPMD )
-        real(r8), allocatable :: bufres(:) 
+        real(r8), allocatable :: bufres(:)
 
         integer :: numrecv          ! number of items to be received
         integer :: displs(0:npes-1) ! displacement array
@@ -425,7 +506,7 @@ contains
         if (masterproc) then
             isiz = 0
             do p=0,npes-1
-                isiz = isiz + numperlat*nlat_p(p)
+                isiz = isiz + numperlat*nlat_each_proc(p+1)
             end do
             allocate (bufres(isiz))
             read (iu,iostat=ioerr) bufres
@@ -461,19 +542,19 @@ contains
     !! subroutine readin_r8 (iu, arr, numperlat)
     !! subroutine readin_r8_dyn (iu, arr, numhor, numver)
     subroutine readin_r8_dyn (iu, arr, mx,my,mz)
-        !----------------------------------------------------------------------- 
-        ! 
-        ! Purpose: 
-        ! Wrapper routine to read binary file 
-        ! 
-        ! Author: 
-        ! 
+        !-----------------------------------------------------------------------
+        !
+        ! Purpose:
+        ! Wrapper routine to read binary file
+        !
+        ! Author:
+        !
         !-----------------------------------------------------------------------
         !
         ! Arguments
         !
         integer, intent(in) :: iu                 ! Logical unit
-        integer, intent(in) :: mx,my,mz 
+        integer, intent(in) :: mx,my,mz
 
 
         !!    real(r8) :: arr(numperlat*numlats)        ! Array to be gathered
@@ -485,7 +566,7 @@ contains
         integer ioerr              ! errorcode
 
 #if ( defined SPMD )
-        real(r8), allocatable :: bufres(:) 
+        real(r8), allocatable :: bufres(:)
 
         real(r8) :: arrtmp(mx,mz,my-2)        ! Array to be gathered
 
@@ -502,8 +583,8 @@ contains
         if (masterproc) then
             isiz = 0
             do p = 0, npes-1
-                !isiz = isiz+numperlat*nlat_p(p)
-                isiz = isiz+mx*mz*nlat_p(p)
+                !isiz = isiz+numperlat*nlat_each_proc(p+1)
+                isiz = isiz+mx*mz*nlat_each_proc(p+1)
             end do
             allocate (bufres(isiz))
             read (iu,iostat=ioerr) bufres
@@ -545,13 +626,13 @@ contains
     !!#############################(wanhui)#################################
 
     subroutine readin_r4 (iu, arr, numperlat)
-        !----------------------------------------------------------------------- 
-        ! 
-        ! Purpose: 
-        ! Wrapper routine to read binary file 
-        ! 
-        ! Author: 
-        ! 
+        !-----------------------------------------------------------------------
+        !
+        ! Purpose:
+        ! Wrapper routine to read binary file
+        !
+        ! Author:
+        !
         !-----------------------------------------------------------------------
         !
         ! Arguments
@@ -566,7 +647,7 @@ contains
         integer ioerr              ! errorcode
 
 #if ( defined SPMD )
-        real(r4), allocatable :: bufres(:) 
+        real(r4), allocatable :: bufres(:)
 
         integer :: numrecv          ! number of items to be received
         integer :: displs(0:npes-1) ! displacement array
@@ -579,7 +660,7 @@ contains
         if (masterproc) then
             isiz = 0
             do p=0,npes-1
-                isiz = isiz + numperlat*nlat_p(p)
+                isiz = isiz + numperlat*nlat_each_proc(p+1)
             end do
             allocate (bufres(isiz))
             read (iu,iostat=ioerr) bufres
@@ -612,13 +693,13 @@ contains
     !#######################################################################
 
     subroutine readin_int (iu, arr, numperlat)
-        !----------------------------------------------------------------------- 
-        ! 
-        ! Purpose: 
-        ! Wrapper routine to write restart binary file 
-        ! 
-        ! Author: 
-        ! 
+        !-----------------------------------------------------------------------
+        !
+        ! Purpose:
+        ! Wrapper routine to write restart binary file
+        !
+        ! Author:
+        !
         !-----------------------------------------------------------------------
         !
         ! Arguments
@@ -632,7 +713,7 @@ contains
         integer ioerr              ! errorcode
 
 #if ( defined SPMD )
-        integer, allocatable :: bufres(:) 
+        integer, allocatable :: bufres(:)
         integer isiz
         integer :: p
         integer :: numrecv          ! number of items to be received
@@ -644,7 +725,7 @@ contains
         if (masterproc) then
             isiz = 0
             do p=0,npes-1
-                isiz = isiz + numperlat*nlat_p(p)
+                isiz = isiz + numperlat*nlat_each_proc(p+1)
             end do
             allocate (bufres(isiz))
             read (iu,iostat=ioerr) bufres
@@ -717,8 +798,8 @@ contains
         if (masterproc) then
             isiz = 0
             do p=0,npes-1
-                !!          isiz = isiz + numperlat*nlat_p(p)
-                isiz = isiz + mx*mz*nlat_p(p)
+                !!          isiz = isiz + numperlat*nlat_each_proc(p+1)
+                isiz = isiz + mx*mz*nlat_each_proc(p+1)
             end do
             allocate (bufres(isiz))
             read (iu,iostat=ioerr) bufres

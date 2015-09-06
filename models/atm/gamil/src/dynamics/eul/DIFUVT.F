@@ -10,9 +10,9 @@
      _                ,CUR,DLT1,DLT2,MP1,MP2,MP3,MM1,MM2,MM3,WTGV
      _                ,DU,DV,DTT,SU,SV,ST,FBC)
 
-#if ( defined SPMD )
-      use mpishorthand, only: mpicom
-#endif
+      use pmgrid, only: beglatexdyn,endlatexdyn, plat
+      use mpi_gamil
+      use comfm1, only: TTV
 
       IMPLICIT NONE
 !
@@ -21,27 +21,6 @@
 
 #include <PARADYN>
 
-#if (defined SPMD)
-#include <commpi.h>
-#include <mpif.h>
-
-      character*50 filename
-
-      integer num1,num2
-      parameter(num1=nx*(nl*4+1),num2=nx*(8*nl+2*nz+1) )
-
-      real*8  worksb( num1 )
-      real*8  workrt( num1 )
-      real*8  workst( num2 )
-      real*8  workrb( num2 )
-
-      integer isend1,irecv1
-      integer isend2,irecv2
-      integer istatus(mpi_status_size)
-      integer ii
-#else
-      integer jpole
-#endif
 !
 !	The file PARA is to define the parameters related to the model resolution:
 !     NX is the grid number in longitude
@@ -49,134 +28,101 @@
 !     NL is the number of vertical layers
 !
 	  REAL*8
-     _       U  (NX,NY,NL)  !  input variable, U  = u*sqrt(Ps)
-     _	  ,US(NX,NY,NL )  !  input variable, US = u, zonal wind
-     _      ,V  (NX,NY,NL)  !	 input variable, V  = v*sqrt(Ps)
-     _      ,VS(NX,NY,NL )  !  input variable, VS = v, meridional wind
-     _      ,WS(NX,NY,NZ )  !  input variable, WS = w, vertical velocity
-     _      ,P  (NX,NY   )  !  input variable, P  = sqrt(Ps)
-     _      ,PS (NX,NY   )  !	 input variable, Surface pressure
-     _      ,PLY(NX,NY,NL)  !  input variable, PLY=p, Pressure in Sigma Layer
-     _      ,DPS(NX,NY   )  !  input variable,
+     _       U  (beglonex:endlonex,beglatexdyn:endlatexdyn,NL)  !  input variable, U  = U*sqrt(PS)
+     _	  ,US(beglonex:endlonex,beglatexdyn:endlatexdyn,NL )  !  input variable, US = U, zonal wind
+     _      ,V  (beglonex:endlonex,beglatexdyn:endlatexdyn,NL)  !	 input variable, V  = V*sqrt(PS)
+     _      ,VS(beglonex:endlonex,beglatexdyn:endlatexdyn,NL )  !  input variable, VS = V, meridional wind
+     _      ,WS(beglonex:endlonex,beglatexdyn:endlatexdyn,NZ )  !  input variable, WS = w, vertical velocity
+     _      ,P  (beglonex:endlonex,beglatexdyn:endlatexdyn   )  !  input variable, P  = sqrt(PS)
+     _      ,PS (beglonex:endlonex,beglatexdyn:endlatexdyn   )  !	 input variable, Surface pressure
+     _      ,PLY(beglonex:endlonex,beglatexdyn:endlatexdyn,NL)  !  input variable, PLY=p, Pressure in Sigma Layer
+     _      ,DPS(beglonex:endlonex,beglatexdyn:endlatexdyn   )  !  input variable,
 !                              the tendency of the surface pressure
-     _      ,TT (NX,NY,NL)  !  input variable, TT=R*T'*Sqrt(Ps)/CB,
+     _      ,TT (beglonex:endlonex,beglatexdyn:endlatexdyn,NL)  !  input variable, TT=R*T'*Sqrt(PS)/CB,
 !                              where T'=T-TB, T is the temperatur,
 !                              TBB	is Temperature of the standard atmosphere
-     _	  ,H (NX,NY,NZ )  !  input variable,
-     _	  ,HH(NX,NY,NZ )  !  input variable,
+     _	  ,H (beglonex:endlonex,beglatexdyn:endlatexdyn,NZ )  !  input variable,
+     _	  ,HH(beglonex:endlonex,beglatexdyn:endlatexdyn,NZ )  !  input variable,
 !  			     H=gz-HBB, gz is the geopotential height,
 !                              HBB is the geopotential height of the standard atmopshere
-     _      ,CB (NX,NY,NL)  !  input variable, CB=Sqrt(R*(KK*TBB-dTB/dlnp)),
+     _      ,CB (beglonex:endlonex,beglatexdyn:endlatexdyn,NL)  !  input variable, CB=Sqrt(R*(KK*TBB-dTB/dlnp)),
 !                              where, KK=R/Cp, R is a constant
-     _      ,DCB(NX,NY,NL)  !  input variable,
+     _      ,DCB(beglonex:endlonex,beglatexdyn:endlatexdyn,NL)  !  input variable,
      _      ,SIGL(NL     )  !  input constant, the vertical layers
      _      ,DSIG(NL     )  !  input constant, the vertical stepsizes
      _      ,DY             !  input constant,
 !                              the horizontal stepsize in meridional direction
-     _      ,SINV(NY)       !  input constant, sin(theta) at half grid j+1/2
-     _      ,OUX(NY)        !  input constant, OUX=1/(RAD*SINU*DX*MDJ)
+     _      ,SINV(beglatexdyn:endlatexdyn)       !  input constant, sin(theta) at half grid j+1/2
+     _      ,OUX(beglatexdyn:endlatexdyn)        !  input constant, OUX=1/(RAD*SINU*DX*MDJ)
 !                              where, DX is the horizontal stepsize in zonal direction,
 !                              MDJ is the leaping length of the central difference
 !                              SINU is sin(theta) at intger grid j
-     _      ,OVX(NY)        !  input constant, OUX=1/(RAD*SINV*DX*MDJ)
-     _      ,OUY(NY)        !  input constant, OUY=1/(RAD*SINU*DY*WTGU)
+     _      ,OVX(beglatexdyn:endlatexdyn)        !  input constant, OUX=1/(RAD*SINV*DX*MDJ)
+     _      ,OUY(beglatexdyn:endlatexdyn)        !  input constant, OUY=1/(RAD*SINU*DY*WTGU)
 !                              where WTGU is the weighting at the integer grid j
-     _      ,OVY(NY)        !  input constant, OUY=1/(RAD*SINV*DY*WTGU)
-     _      ,WTGV(NY)       !	 input constant,
+     _      ,OVY(beglatexdyn:endlatexdyn)        !  input constant, OUY=1/(RAD*SINV*DY*WTGU)
+     _      ,WTGV(beglatexdyn:endlatexdyn)       !	 input constant,
 !                              the weighting at the half grid j+1/2,
      _	  ,DLT1           !  input constant
      _      ,DLT2           !	 input constant
-     _      ,FF(NY)         !	 input constant
-     _      ,CUR(NY)		  !	 input constant
+     _      ,FF(beglatexdyn:endlatexdyn)         !	 input constant
+     _      ,CUR(beglatexdyn:endlatexdyn)		  !	 input constant
 !
 	INTEGER
-     _       MM1(NX,NY)     !	 input constant
-     _      ,MP1(NX,NY)     !	 input constant
-     _      ,MM2(NX,NY)     !	 input constant
-     _      ,MP2(NX,NY)     !	 input constant
-     _      ,MM3(NX,NY)     !	 input constant
-     _      ,MP3(NX,NY)     !	 input constant
+     _       MM1(beglonex:endlonex,beglatexdyn:endlatexdyn)     !	 input constant
+     _      ,MP1(beglonex:endlonex,beglatexdyn:endlatexdyn)     !	 input constant
+     _      ,MM2(beglonex:endlonex,beglatexdyn:endlatexdyn)     !	 input constant
+     _      ,MP2(beglonex:endlonex,beglatexdyn:endlatexdyn)     !	 input constant
+     _      ,MM3(beglonex:endlonex,beglatexdyn:endlatexdyn)     !	 input constant
+     _      ,MP3(beglonex:endlonex,beglatexdyn:endlatexdyn)     !	 input constant
 !
       REAL*8
-     _       DU(NX,NY,NL)	  !  output variables
-     _      ,DV(NX,NY,NL)   !  output variables
-     _      ,DTT(NX,NY,NL)  !  output variables
-     _      ,SU(NX,NY,NL)   !  input variables
-     _      ,SV(NX,NY,NL)   !  input variables
-     _      ,ST(NX,NY,NL)   !  input variables
+     _       DU(beglonex:endlonex,beglatexdyn:endlatexdyn,NL)	  !  output variables
+     _      ,DV(beglonex:endlonex,beglatexdyn:endlatexdyn,NL)   !  output variables
+     _      ,DTT(beglonex:endlonex,beglatexdyn:endlatexdyn,NL)  !  output variables
+     _      ,SU(beglonex:endlonex,beglatexdyn:endlatexdyn,NL)   !  input variables
+     _      ,SV(beglonex:endlonex,beglatexdyn:endlatexdyn,NL)   !  input variables
+     _      ,ST(beglonex:endlonex,beglatexdyn:endlatexdyn,NL)   !  input variables
 !
-      REAL*8  TTZ(NX,NY,NZ+1)
-      REAL*8  UZ(NX,NY,NZ+1),VZ(NX,NY,NZ+1)
+      REAL*8  TTZ(beglonex:endlonex,beglatexdyn:endlatexdyn,NZ+1)
+      REAL*8  UZ(beglonex:endlonex,beglatexdyn:endlatexdyn,NZ+1)
+      REAL*8  VZ(beglonex:endlonex,beglatexdyn:endlatexdyn,NZ+1)
       INTEGER I,J,K
-      INTEGER IM1,IP2,IP1,IM2,I1,J0,IM3,IP3
+      INTEGER IM1,IP2,IP1,IM2,IM3,IP3
       REAL*8  OY1,R22,R21,R12,DYP0,DXP1,DXP0,DTTP,TO3P
       REAL*8  R11,OUX2,DYP2,O2,O1,TL3,TO3,TO2,TO1
       REAL*8  TL2,TL1,OPK0,OZ2
-      REAL*8  OY4,RI0,TO1P,TL3P,TO2P
-      REAL*8  O2P,TLP,O1P,WKP
+      REAL*8  OY4,RI0,TO1P,TL3P,TO2P,O2P_TMP,TLP_TMP
+      REAL*16 O2P_16(NL),TLP_16(NL),O2P_SUM,TLP_SUM
+      REAL*16 O2P_BUF(8,NL),TLP_BUF(8,NL)
+      REAL*8  O1P,WKP
       REAL*8  RV1,RV2,OVX4,OVY4,PDXP1,PDXP2,R14
       REAL*8  OUX4,R10,R20,R24,UL2,UL3
       REAL*8  H0,UL1,PX2,FSV,PX1,AXP0
       REAL*8  OPK1,PDYP2,AYP0,PDYP1
       REAL*8  VL2,VL3,OPK3,VL1,PY1
       REAL*8  FSU,PY2,FFYY,OZ4,OPK2
-      REAL*8  FS0,FFXX,H1,OYY4,HPS(NX,NY)
-      REAL*8  FBC(NX,NY,NL),TTV(NX,NY,NL)
-      integer begj,endj
+      REAL*8  FS0,FFXX,H1,OYY4
+      REAL*8  HPS(beglonex:endlonex,beglatexdyn:endlatexdyn)
+      REAL*8  FBC(beglonex:endlonex,beglatexdyn:endlatexdyn,NL)
+      REAL*8  PLY_pole_2(NL), PS_pole_2(1), WS_pole_2(NZ), DPS_pole_2(1)
+      REAL*8  TTZ_pole_2(NZ+1), P_pole_2(1), CB_pole_2(NL), DCB_pole_2(NL), TTV_pole_2(NL)
+      integer :: icomm_request1, icomm_request2, icomm_request3, icomm_request4
 
-#if (defined SPMD)
-      begj = 2
-      endj = ny-1
-#else
-      begj = 1
-      endj = ny
-#endif
 
-#if (defined SPMD)
-
-      ii=1
-      do i=1,nx
-         worksb(ii)=p(i,ny-1)
-         ii=ii+1
-      enddo
-!--1--
-      do k=1,nl
-       do i=1,nx
-         worksb(ii)=u(i,ny-1,k)
-         ii=ii+1
-       enddo
-      enddo
-!--2--
-      do k=1,nl
-       do i=1,nx
-         worksb(ii)=v(i,ny-1,k)
-         ii=ii+1
-       enddo
-      enddo
-!--3--
-      do k=1,nl
-       do i=1,nx
-         worksb(ii)=tt(i,ny-1,k)
-         ii=ii+1
-       enddo
-      enddo
-!--4--
-      do k=1,nl
-       do i=1,nx
-         worksb(ii)=vs(i,ny-1,k)
-         ii=ii+1
-       enddo
-      enddo
-
-      call mpi_isend( worksb,num1,mpi_double_precision,ibot,1,mpicom,isend1,ierr)
-      call mpi_irecv( workrt,num1,mpi_double_precision,itop,1,mpicom,irecv1,ierr)
-#endif
+      call t_startf("DIFUVT COMM")
+      call gamil_arrays_comm(COMM_TO_BOT,1,p(:,beglatexdyn),U(:,beglatexdyn,1),
+     &                       V(:,beglatexdyn,1),tt(:,beglatexdyn,1),vs(:,beglatexdyn,1),
+     &                       request_id=icomm_request1)
+      call gamil_arrays_comm(COMM_TO_TOP,1,H(:,beglatexdyn,1),ws(:,beglatexdyn,1),
+     &                        cb(:,beglatexdyn,1),PLY(:,beglatexdyn,1),U(:,beglatexdyn,1),
+     &                        V(:,beglatexdyn,1),tt(:,beglatexdyn,1), us(:,beglatexdyn,1),
+     &                        vs(:,beglatexdyn,1),request_id=icomm_request2)
+      call t_stopf("DIFUVT COMM")
 
 C     AS FOLLOWS, THE IMPROVED LEAP-FROG AND THE REGENERATION OF
 C     VARIABLES WILL BE FINISHED IN THE SAME CYCLES.
 C
-      I1=NX-1
-      J0=NY-1
       RI0=DFLOAT(NX-2)
       OY1=1.0D0/(RAD*DY)
       OY4=0.25D0*OY1
@@ -187,375 +133,248 @@ C
 C     FORMING THE FACTORS OUT OF ALL THE CYCLES AND CLEANING SOME
 C     SPECIAL ARRAIES.
 C
-!     (DO J=1,NY)
-      DO J=begj,endj
-      DO I=1,NX
-      DO K=1,NL
-	 TTV(I,J,K)=TT(I,J,K)*FBC(I,J,K)
-      END DO
-      END DO
-      END DO
-c
-C
-        DO K=1,NZ
-        DO J=begj,endj
-        DO I=1,NX
-           HH(I,J,K)=H(I,J,K)-HPS(I,J)
-        ENDDO
-        ENDDO
-        ENDDO
 
-!     (DO J=1,NY)
-      do j=begj,endj
+      call t_startf("DIFUVT COMP")
+!$OMP PARALLEL DO PRIVATE (I,J,K)
+      DO K=1,NL
+      DO J=jbeg0,jend0
+      DO I=beglonex,endlonex
+	    TTV(I,J,K)=TT(I,J,K)*FBC(I,J,K)
+      END DO
+      END DO
+      END DO
+
+      call t_startf("DIFUVT COMM")
+      call gamil_arrays_comm(COMM_TO_TOP,1,TTV(:,beglatexdyn,1),request_id=icomm_request3)
+      call t_stopf("DIFUVT COMM")
+
+!$OMP PARALLEL DO PRIVATE (I,J,K)
+      DO K=1,NZ
+      DO J=jbeg0,jend0
+      DO I=beglonex,endlonex
+        HH(I,J,K)=H(I,J,K)-HPS(I,J)
+      END DO
+      END DO
+      END DO
+
+      call t_stopf("DIFUVT COMP")
+
+
+      call t_startf("DIFUVT COMP")
+!$OMP PARALLEL DO PRIVATE (I,J,K)
         DO K = 1,NZ+1
           IF(K.EQ.1.OR.K.EQ.NZ+1) THEN
-            DO I = 1,NX
+          DO j=jbeg0,jend0
+            DO I = beglonex,endlonex
               TTZ(I,J,K) = 0.0D0
               UZ(I,J,K) = 0.0D0
               VZ(I,J,K) = 0.0D0
             ENDDO
+          ENDDO
           ELSE
-            DO I = 1,NX
+          DO j=jbeg0,jend0
+            DO I = beglonex,endlonex
               TTZ(I,J,K) = TT(I,J,K-1)
               UZ(I,J,K) = U(I,J,K-1)
               VZ(I,J,K) = V(I,J,K-1)
             ENDDO
+          ENDDO
           ENDIF
         ENDDO
-      enddo
+      call t_stopf("DIFUVT COMP")
 
-#if (defined SPMD)
-      ii=1
-      do i=1,nx
-         workst(ii)=p(i,2)
-         ii=ii+1
-      enddo
-!--1--
-      do k=1,nz
-       do i=1,nx
-         workst(ii)=h(i,2,k)
-         ii=ii+1
-       enddo
-      enddo
-!--2--
-      do k=1,nz
-       do i=1,nx
-         workst(ii)=ws(i,2,k)
-         ii=ii+1
-       enddo
-      enddo
-!--1--
-      do k=1,nl
-       do i=1,nx
-         workst(ii)=cb(i,2,k)
-         ii=ii+1
-       enddo
-      enddo
-!--2--
-      do k=1,nl
-       do i=1,nx
-         workst(ii)=ply(i,2,k)
-         ii=ii+1
-       enddo
-      enddo
-!--3--
-      do k=1,nl
-       do i=1,nx
-         workst(ii)=u(i,2,k)
-         ii=ii+1
-       enddo
-      enddo
-!--4--
-      do k=1,nl
-       do i=1,nx
-         workst(ii)=v(i,2,k)
-         ii=ii+1
-       enddo
-      enddo
-!--5--
-      do k=1,nl
-       do i=1,nx
-         workst(ii)=tt(i,2,k)
-         ii=ii+1
-       enddo
-      enddo
-!--6--
-      do k=1,nl
-       do i=1,nx
-         workst(ii)=ttv(i,2,k)
-         ii=ii+1
-       enddo
-      enddo
-!--7--
-      do k=1,nl
-       do i=1,nx
-         workst(ii)=us(i,2,k)
-         ii=ii+1
-       enddo
-      enddo
-!--8--
-      do k=1,nl
-       do i=1,nx
-         workst(ii)=vs(i,2,k)
-         ii=ii+1
-       enddo
-      enddo
+      call t_startf("DIFUVT COMM")
+      call wait_icomm_request(icomm_request1)
+      call wait_icomm_request(icomm_request2)
+      call wait_icomm_request(icomm_request3)
+      call t_stopf("DIFUVT COMM")
 
-      call mpi_isend( workst,num2,mpi_double_precision,itop,2,mpicom,isend2,ierr)
-      call mpi_irecv( workrb,num2,mpi_double_precision,ibot,2,mpicom,irecv2,ierr)
-
-!----------------------------------------------unpacking dataset 1----
-      call mpi_wait( isend1,istatus,ierr )
-      call mpi_wait( irecv1,istatus,ierr )
-
-      ii=1
-      do i=1,nx
-         p(i,1)=workrt(ii)
-         ii=ii+1
-      enddo
-!--1--
-      do k=1,nl
-       do i=1,nx
-         u(i,1,k)=workrt(ii)
-         ii=ii+1
-       enddo
-      enddo
-!--2--
-      do k=1,nl
-       do i=1,nx
-         v(i,1,k)=workrt(ii)
-         ii=ii+1
-       enddo
-      enddo
-!--3--
-      do k=1,nl
-       do i=1,nx
-         tt(i,1,k)=workrt(ii)
-         ii=ii+1
-       enddo
-      enddo
-!--4--
-      do k=1,nl
-       do i=1,nx
-         vs(i,1,k)=workrt(ii)
-         ii=ii+1
-       enddo
-      enddo
-
-!----------------------------------------------unpacking dataset 2----
-
-      call mpi_wait( isend2,istatus,ierr )
-      call mpi_wait( irecv2,istatus,ierr )
-
-      ii=1
-      do i=1,nx
-         p(i,ny)=workrb(ii)
-         ii=ii+1
-      enddo
-!--1--
-      do k=1,nz
-       do i=1,nx
-         h(i,ny,k)=workrb(ii)
-         ii=ii+1
-       enddo
-      enddo
-!--2--
-      do k=1,nz
-       do i=1,nx
-         ws(i,ny,k)=workrb(ii)
-         ii=ii+1
-       enddo
-      enddo
-!--1--
-      do k=1,nl
-       do i=1,nx
-         cb(i,ny,k)=workrb(ii)
-         ii=ii+1
-       enddo
-      enddo
-!--2--
-      do k=1,nl
-       do i=1,nx
-         ply(i,ny,k)=workrb(ii)
-         ii=ii+1
-       enddo
-      enddo
-!--3--
-      do k=1,nl
-       do i=1,nx
-         u(i,ny,k)=workrb(ii)
-         ii=ii+1
-       enddo
-      enddo
-!--4--
-      do k=1,nl
-       do i=1,nx
-         v(i,ny,k)=workrb(ii)
-         ii=ii+1
-       enddo
-      enddo
-!--5--
-      do k=1,nl
-       do i=1,nx
-         tt(i,ny,k)=workrb(ii)
-         ii=ii+1
-       enddo
-      enddo
-!--6--
-      do k=1,nl
-       do i=1,nx
-         ttv(i,ny,k)=workrb(ii)
-         ii=ii+1
-       enddo
-      enddo
-!--7--
-      do k=1,nl
-       do i=1,nx
-         us(i,ny,k)=workrb(ii)
-         ii=ii+1
-       enddo
-      enddo
-!--8--
-      do k=1,nl
-       do i=1,nx
-         vs(i,ny,k)=workrb(ii)
-         ii=ii+1
-       enddo
-      enddo
-
-#endif
-
-
+      DO j=jbeg0,jend0
 C
 C     CALCULATING DTT/DT AT POLES.
 C
-#if (!defined SPMD)
-       jpole =1
-#else
-       if (myrank.eq.(nprocs-1)) then
-#endif
-!!        (IF(J.EQ.1) THEN)   ! for the north pole
+       IF(J.EQ.1 .OR. J.EQ.PLAT) THEN
+          call t_startf("DIFUVT COMP")
+          IF(ibeg1.EQ.2) THEN
+             DO K=1,NL
+                PLY_pole_2(K) = PLY(ibeg1,J,K)
+                CB_pole_2(K) = CB(ibeg1,J,K)
+                DCB_pole_2(K) = DCB(ibeg1,J,K)
+                TTV_pole_2(K) = TTV(ibeg1,J,K)
+                WS_pole_2(K) = WS(ibeg1,J,K)
+                TTZ_pole_2(K) = TTZ(ibeg1,J,K)
+             ENDDO    
+             WS_pole_2(NZ) = WS(ibeg1,J,NZ)
+             TTZ_pole_2(NZ) = TTZ(ibeg1,J,NZ)
+             TTZ_pole_2(NZ+1) = TTZ(ibeg1,J,NZ+1)
+             PS_pole_2(1) = PS(ibeg1,J)
+             P_pole_2(1) = P(ibeg1,J)
+             DPS_pole_2(1) = DPS(ibeg1,J)
+          ENDIF
+          call t_stopf("DIFUVT COMP")
+          call broadcast_lon_data(2,J,PLY_pole_2,NL,CB_pole_2,NL,DCB_pole_2,NL,TTV_pole_2,NL,
+     &                       WS_pole_2,NZ,TTZ_pole_2,NZ+1,PS_pole_2,1,P_pole_2,1,DPS_pole_2,1)
+       ENDIF
 
-          DO K=1,NL
-            OZ2=0.5D0/DSIG(K)
-            OZ4=0.5D0*OZ2
+       IF(J.EQ.1) THEN   ! for the north pole
+
+          call t_startf("DIFUVT COMP")
 C
 C       CALCULATING ADVECTION OF TT AND VERTICAL MOTION OVER PRESSURE
 C       AT POLES.
-C
-            TLP=0.0D0
-            O2P=0.0D0
-            DO I=2,I1
-              TLP=TLP+VS(I,jpole,K)*TT(I,jpole+1,K)
-              O2P=O2P+(P(I,jpole+1)-P(1,jpole))*V(I,jpole,K)
+!$OMP PARALLEL DO PRIVATE (K,I,TLP_SUM,O2P_SUM,TLP_TMP,O2P_TMP)
+          DO K=1,NL
+            TLP_SUM=0.0D0
+            O2P_SUM=0.0D0
+            DO I=ibeg1,iend1
+              TLP_SUM=TLP_SUM+VS(I,J,K)*TT(I,J+1,K)
+              O2P_SUM=O2P_SUM+(P(I,J+1)-P(I,J))*V(I,J,K)
             ENDDO
-            WKP=2.0D0/RI0*OY1*WTGV(jpole)
-            TLP=WKP*TLP
-            O2P=2.0D0*WKP*O2P*SIGL(K)/PLY(1,jpole,K)
-            O1P=(0.5D0*PS(1,jpole)*(WS(1,jpole,K+1)+WS(1,jpole,K))
-     &        +DPS(1,jpole)*SIGL(K))/PLY(1,jpole,K)
-            TL3P=OZ2*(WS(1,jpole,K+1)*TTZ(1,jpole,K+2)
-     &               -WS(1,jpole,K)*TTZ(1,jpole,K))
+            TLP_BUF(1,K)=TLP_SUM
+            O2P_BUF(1,K)=O2P_SUM
+          ENDDO
+          
+          DO K=1,NL
+            TLP_16(K)=TLP_BUF(1,K)
+            O2P_16(K)=O2P_BUF(1,K)
+          ENDDO
+          call t_stopf("DIFUVT COMP")
+
+          call t_startf("DIFUVT COMM")
+          call gamil_sum_pole_data_phys(J,TLP_16,NL,O2P_16,NL)
+          call t_stopf("DIFUVT COMM")
+
+          call t_startf("DIFUVT COMP")
+!$OMP PARALLEL DO PRIVATE (K,I,OZ2,OZ4,WKP,O1P,TL3P,TO1P,TO2P,TO3P,DTTP,IP1,IM1,IP2,IM2,
+!$   &                     DYP0,PDYP1,PDYP2,AYP0,OPK0,OPK3,VL1,VL2,VL3,FSU,PY1,PY2,FFYY,
+!$   &                     TLP_TMP,O2P_TMP)
+          DO K=1,NL
+            OZ2=0.5D0/DSIG(K)
+            OZ4=0.5D0*OZ2
+            WKP=2.0D0/RI0*OY1*WTGV(J)
+            TLP_TMP=TLP_16(K)
+            TLP_TMP=WKP*TLP_TMP
+            O2P_TMP=O2P_16(K)
+            O2P_TMP=2.0D0*WKP*O2P_TMP*SIGL(K)/PLY_pole_2(K)
+            O1P=(0.5D0*PS_pole_2(1)*(WS_pole_2(K+1)+WS_pole_2(K))
+     &        +DPS_pole_2(1)*SIGL(K))/PLY_pole_2(K)
+            TL3P=OZ2*(WS_pole_2(K+1)*TTZ_pole_2(K+2)
+     &               -WS_pole_2(K)*TTZ_pole_2(K))
 C
-            TO1P=CB(1,jpole,K)*P(1,jpole)*O1P
-            TO2P=CB(1,jpole,K)*P(1,jpole)*O2P
-            TO3P=(DLT1*CAPA-DLT2*DCB(1,jpole,K))*TTV(1,jpole,K)*(O1P+O2P)
+            TO1P=CB_pole_2(K)*P_pole_2(1)*O1P
+            TO2P=CB_pole_2(K)*P_pole_2(1)*O2P_TMP
+            TO3P=(DLT1*CAPA-DLT2*DCB_pole_2(K))*TTV_pole_2(K)*(O1P+O2P_TMP)
 C
 C     CALCULATING DTT/DT AND FORMING BOTH POLAR BOUNDARIES.
-            DTTP=-TLP-TL3P+TO1P+TO2P+TO3P
-            DO I=1,NX
-              DTT(I,jpole,K)=DTTP+ST(I,jpole,K)
-              DU(I,jpole,K)=SU(I,jpole,K)
+            DTTP=-TLP_TMP-TL3P+TO1P+TO2P+TO3P
+            DO I=beglonex,endlonex
+              DTT(I,J,K)=DTTP+ST(I,J,K)
+              DU(I,J,K)=SU(I,J,K)
             ENDDO
-            DO I=2,I1
-              IP1=MP1(I,jpole)
-              IM1=MM1(I,jpole)
-              IP2=MP2(I,jpole)
-              IM2=MM2(I,jpole)
+            DO I=ibeg1,iend1
+              IP1=MP1(I,J)
+              IM1=MM1(I,J)
+              IP2=MP2(I,J)
+              IM2=MM2(I,J)
 C
-              DYP0=P(I,jpole+1)-P(I,jpole)
-              PDYP1=P(I,jpole+1)*DYP0
-              PDYP2=P(I,jpole)*DYP0
-              AYP0=0.25D0*(P(I,jpole)+P(I,jpole+1))
+              DYP0=P(I,J+1)-P(I,J)
+              PDYP1=P(I,J+1)*DYP0
+              PDYP2=P(I,J)*DYP0
+              AYP0=0.25D0*(P(I,J)+P(I,J+1))
 C
-              OPK0=1.0D0/PLY(I,jpole,K)
-              OPK3=1.0D0/PLY(I,jpole+1,K)
+              OPK0=1.0D0/PLY(I,J,K)
+              OPK3=1.0D0/PLY(I,J+1,K)
 C
-              VL1=0.25D0*OVX(jpole)*(US(IP2,jpole+1,K)*V(IP1,jpole,K)
-     &                          -US(IM2,jpole+1,K)*V(IM1,jpole,K))
-              VL2=0.25D0*OVY(jpole)*(SINV(jpole+1)*VS(I,jpole+1,K)
-     &                          +SINV(jpole)*VS(I,jpole,K))*V(I,jpole+1,K)
-              VL3=OZ4*((WS(I,jpole+1,K+1)+WS(I,jpole,K+1))*VZ(I,jpole,K+2)
-     &                -(WS(I,jpole+1,K)+WS(I,jpole,K))*VZ(I,jpole,K))
+              VL1=0.25D0*OVX(J)*(US(IP2,J+1,K)*V(IP1,J,K)
+     &                          -US(IM2,J+1,K)*V(IM1,J,K))
+              VL2=0.25D0*OVY(J)*(SINV(J+1)*VS(I,J+1,K)
+     &                          +SINV(J)*VS(I,J,K))*V(I,J+1,K)
+              VL3=OZ4*((WS(I,J+1,K+1)+WS(I,J,K+1))*VZ(I,J,K+2)
+     &                -(WS(I,J+1,K)+WS(I,J,K))*VZ(I,J,K))
 C
-              FSU=0.25D0*((FF(jpole+1)+CUR(jpole+1)*US(I,jpole+1,K))*U(I,jpole+1,K)
-     &                   +(FF(jpole+1)+CUR(jpole+1)*US(I+1,jpole+1,K))*U(I+1,jpole+1,K))
-              PY1=OY1*AYP0*(H(I,jpole+1,K+1)+H(I,jpole+1,K)-H(I,jpole,K+1)-H(I,jpole,K))
-              PY2=OY1*(PDYP1*TTV(I,jpole+1,K)*OPK3*CB(I,jpole+1,K)
-     &                +PDYP2*TTV(I,jpole,  K)*OPK0*CB(I,jpole,  K))*SIGL(K)
+              FSU=0.25D0*((FF(J+1)+CUR(J+1)*US(I,J+1,K))*U(I,J+1,K)
+     &                   +(FF(J+1)+CUR(J+1)*US(I+1,J+1,K))*U(I+1,J+1,K))
+              PY1=OY1*AYP0*(H(I,J+1,K+1)+H(I,J+1,K)-H(I,J,K+1)-H(I,J,K))
+              PY2=OY1*(PDYP1*TTV(I,J+1,K)*OPK3*CB(I,J+1,K)
+     &                +PDYP2*TTV(I,J,  K)*OPK0*CB(I,J,  K))*SIGL(K)
 C
               FFYY=PY1+PY2
-              DV(I,jpole,K)=-VL1-VL2-VL3+FSU-FFYY*WTGV(jpole)+SV(I,jpole,K)
+              DV(I,J,K)=-VL1-VL2-VL3+FSU-FFYY*WTGV(J)+SV(I,J,K)
 
 C
             ENDDO
-            DV(1,jpole,K)=DV(I1,jpole,K)
-            DV(NX,jpole,K)=DV(2,jpole,K)
           ENDDO
-#if (defined SPMD)
-       ENDIF
-#endif
+          call t_stopf("DIFUVT COMP")
+        ELSE IF(J.EQ.PLAT) THEN  ! for the south pole
 
-
-#if (!defined SPMD)
-       jpole =ny
-#else
-       if (myrank.eq.0) then
-#endif
-!!        (ELSE IF(J.EQ.NY) THEN)  ! for the south pole
-          DO K=1,NL
-            OZ2=0.5D0/DSIG(K)
-            OZ4=0.5D0*OZ2
+          call t_startf("DIFUVT COMP")
 C
 C       CALCULATING ADVECTION OF TT AND VERTICAL MOTION OVER PRESSURE
 C       AT POLES.
-C
-            TLP=0.0D0
-            O2P=0.0D0
-            DO I=2,I1
-              TLP=TLP+VS(I,jpole-1,K)*TT(I,jpole-1,K)
-              O2P=O2P+(P(1,jpole)-P(I,jpole-1))*V(I,jpole-1,K)
+!$OMP PARALLEL DO PRIVATE (K,I,TLP_SUM,O2P_SUM,TLP_TMP,O2P_TMP)
+          DO K=1,NL
+            TLP_SUM=0.0D0
+            O2P_SUM=0.0D0
+            DO I=ibeg1,iend1
+              TLP_SUM=TLP_SUM+VS(I,J-1,K)*TT(I,J-1,K)
+              O2P_SUM=O2P_SUM+(P(I,J)-P(I,J-1))*V(I,J-1,K)
             ENDDO
-            WKP=2.0D0/RI0*OY1*WTGV(jpole-1)
-            TLP=-WKP*TLP
-            O2P=2.0D0*WKP*O2P*SIGL(K)/PLY(1,jpole,K)
-            O1P=(0.5D0*PS(1,jpole)*(WS(1,jpole,K+1)+WS(1,jpole,K))
-     &        +DPS(1,jpole)*SIGL(K))/PLY(1,jpole,K)
-            TL3P=OZ2*(WS(1,jpole,K+1)*TTZ(1,jpole,K+2)
-     &             -WS(1,jpole,K)*TTZ(1,jpole,K))
+            TLP_BUF(1,K)=TLP_SUM
+            O2P_BUF(1,K)=O2P_SUM
+          ENDDO
+          DO K=1,NL
+            TLP_16(K)=TLP_BUF(1,K)
+            O2P_16(K)=O2P_BUF(1,K)
+          ENDDO
+
+          call t_stopf("DIFUVT COMP")
+
+          call t_startf("DIFUVT COMM")
+          call gamil_sum_pole_data_phys(J,TLP_16,NL,O2P_16,NL)
+          call t_stopf("DIFUVT COMM")
+
+          call t_startf("DIFUVT COMP")
+!$OMP PARALLEL DO PRIVATE (K,I,OZ2,OZ4,WKP,O1P,TL3P,TO1P,TO2P,TO3P,DTTP,TLP_TMP,O2P_TMP)
+          DO K=1,NL
+            OZ2=0.5D0/DSIG(K)
+            OZ4=0.5D0*OZ2
+            WKP=2.0D0/RI0*OY1*WTGV(J-1)
+            TLP_TMP=TLP_16(K)
+            TLP_TMP=-WKP*TLP_TMP
+            O2P_TMP=O2P_16(K)
+            O2P_TMP=2.0D0*WKP*O2P_TMP*SIGL(K)/PLY_pole_2(K)
+            O1P=(0.5D0*PS_pole_2(1)*(WS_pole_2(K+1)+WS_pole_2(K))
+     &        +DPS_pole_2(1)*SIGL(K))/PLY_pole_2(K)
+            TL3P=OZ2*(WS_pole_2(K+1)*TTZ_pole_2(K+2)
+     &             -WS_pole_2(K)*TTZ_pole_2(K))
 C
-            TO1P=CB(1,jpole,K)*P(1,jpole)*O1P
-            TO2P=CB(1,jpole,K)*P(1,jpole)*O2P
-            TO3P=(DLT1*CAPA-DLT2*DCB(1,jpole,K))*TTV(1,jpole,K)*(O1P+O2P)
+            TO1P=CB_pole_2(K)*P_pole_2(1)*O1P
+            TO2P=CB_pole_2(K)*P_pole_2(1)*O2P_TMP
+            TO3P=(DLT1*CAPA-DLT2*DCB_pole_2(K))*TTV_pole_2(K)*(O1P+O2P_TMP)
 C
 C     CALCULATING DTT/DT AND FORMING BOTH POLAR BOUNDARIES.
-            DTTP=-TLP-TL3P+TO1P+TO2P+TO3P
-            DO I=1,NX
-              DTT(I,jpole,K)=DTTP+ST(I,jpole,K)
-              DU(I,jpole,K)=SU(I,jpole,K)
-              DV(I,jpole,K)=SV(I,jpole,K)
+            DTTP=-TLP_TMP-TL3P+TO1P+TO2P+TO3P
+            DO I=beglonex,endlonex
+              DTT(I,J,K)=DTTP+ST(I,J,K)
+              DU(I,J,K)=SU(I,J,K)
+              DV(I,J,K)=SV(I,J,K)
             ENDDO
           ENDDO
-!!        ELSE
-#if (defined SPMD)
-       endif
+          call t_stopf("DIFUVT COMP")
+        ENDIF
+      ENDDO
 
-       do j=jbeg,jend
-#else
-       do j=2,ny-1
-#endif
+
+      call t_startf("DIFUVT COMP")
+!$OMP PARALLEL DO PRIVATE (I,J,K,OZ2,OZ4,WKP,O1P,TL3P,TO1P,TO2P,
+!$   &                           TO3P,DTTP,IP1,IM1,IP2,IM2,DYP0,PDYP1,PDYP2,AYP0,OPK0,OPK3,
+!$   &                           VL1,VL2,VL3,FSU,PY1,PY2,FFYY,OUX2,OUX4,R11,R12,R21,R22,R14,
+!$   &                           R24,R10,R20,OVX4,OVY4,RV1,RV2,OYY4,DXP0,DXP1,DYP2,TL1,TL2,
+!$   &                           TL3,O1,O2,TO1,TO2,TO3,IP3,IM3,PDXP1,PDXP2,AXP0,OPK1,OPK2,
+!$   &                           H0,H1,UL1,UL2,UL3,FS0,FSV,PX1,PX2,FFXX)
+      DO j=jbeg1,jend1
 C
-C     CALCULATING DTT/DT FROM J=2 TO J=J0.
+C     CALCULATING DTT/DT FROM J=2 TO J=PLAT-1.
 C
 C     FORMING THE FACTORS INDEPENDENT ON I, K
 C
@@ -573,13 +392,13 @@ C
           OVY4=0.25D0*OVY(J)
           RV1=SINV(J+1)*OVY4
           RV2=SINV(J-1)*OVY4
-	  OYY4=OY4*WTGV(J)
+          OYY4=OY4*WTGV(J)
 C
           DO K=1,NL
             OZ2=0.5D0/DSIG(K)
             OZ4=0.5D0*OZ2
 C
-            DO I=2,I1
+            DO I=ibeg1,iend1
 C
               IP1=MP1(I,J)
               IM1=MM1(I,J)
@@ -598,7 +417,7 @@ C     REPEATEDLY AND PLACING THEM INTO WORKING UNITS.
 C
               OPK0=1.0D0/PLY(I,J,K)
 C
-C     CALCULATING DTT/DT FOR J=2--J0, I=2--I1 ANDK=1--NL.
+C     CALCULATING DTT/DT FOR J=2--NY-1, I=2--NX-1 ANDK=1--NL.
 C
               TL1=OUX2*(US(IP2,J,K)*TT(IP1,J,K)-US(IM2,J,K)*TT(IM1,J,K))
               TL2=R12*VS(I,J,K)*TT(I,J+1,K)-R22*VS(I,J-1,K)*TT(I,J-1,K)
@@ -613,10 +432,8 @@ C
               TO3=(DLT1*CAPA-DLT2*DCB(I,J,K))*TTV(I,J,K)*(O1+O2)
               DTT(I,J,K)=-TL1-TL2-TL3+TO1+TO2+TO3+ST(I,J,K)
             ENDDO
-            DTT(1,J,K)=DTT(I1,J,K)
-            DTT(NX,J,K)=DTT(2,J,K)
 C
-            DO I=2,I1
+            DO I=ibeg1,iend1
 C
               IP1=MP1(I,J)
               IM1=MM1(I,J)
@@ -649,7 +466,7 @@ C
 !             H0=H(IP3,J,K+1)+H(IP3,J,K)
               H0=HH(IP3,J,K+1)+HH(IP3,J,K)
 C
-C     CALCULATING DU/DT, DV/DT J=2--J0, I=2--I1 AND K=1--NL.
+C     CALCULATING DU/DT, DV/DT J=2--NY-1, I=2--NX-1 AND K=1--NL.
 C
               UL1=OUX4*((US(I,J,K)+US(IP1,J,K))*U(IP1,J,K)
      &                 -(US(I,J,K)+US(IM1,J,K))*U(IM1,J,K))
@@ -684,53 +501,17 @@ C
               DU(I,J,K)=-UL1-UL2-UL3-FSV-FFXX+SU(I,J,K)
               DV(I,J,K)=-VL1-VL2-VL3+FSU-FFYY*WTGV(J)+SV(I,J,K)
             ENDDO
-            DU(1,J,K)=DU(I1,J,K)
-            DU(NX,J,K)=DU(2,J,K)
-            DV(1,J,K)=DV(I1,J,K)
-            DV(NX,J,K)=DV(2,J,K)
           ENDDO
-!!        (ENDIF)
 	END DO
-!- check ---------------------------------------------------------
-!
-!#if (defined SPMD)
-!      write(filename,14) 'difuvt-p-',myrank,'.out'
-!14    format(a9,i1,a4)
-!      open (10,file=trim(filename))
-!#else
-!      open (10,file='difuvt-s.out')
-!#endif
-!
-!      write(10,*) '------------------- du 26 -----------------'
-!      write(10,11) (j,(du(i,j,26),i=1,2),j=1,ny)
-!
-!      write(10,*) '------------------- dv 26 -----------------'
-!      write(10,11) (j,(dv(i,j,26),i=1,2),j=1,ny)
-!
-!      write(10,*) '------------------- dtt 26 -----------------'
-!      write(10,11) (j,(dtt(i,j,26),i=1,2),j=1,ny)
-!
-!      write(10,*) '------------------- du 12 -----------------'
-!      write(10,11) (j,(du(i,j,12),i=1,2),j=1,ny)
-!
-!      write(10,*) '------------------- dv 12 -----------------'
-!      write(10,11) (j,(dv(i,j,12),i=1,2),j=1,ny)
-!
-!      write(10,*) '------------------- dtt 12 -----------------'
-!      write(10,11) (j,(dtt(i,j,12),i=1,2),j=1,ny)
-!
-!11    format(1x,i5,2e30.20)
-!
-!
-!      close (10)
-!
-!#if (defined SPMD)
-!!      call mpi_finalize(j)
-!#endif
-!!      stop 'difuvt'
-!
-!-----------------------------------------------------------------
 
+      call t_stopf("DIFUVT COMP")
+
+      call t_startf("DIFUVT COMM")
+      call gamil_arrays_comm(COMM_TO_LEFT,1,DU(:,beglatexdyn,1),DV(:,beglatexdyn,1),DTT(:,beglatexdyn,1),request_id=icomm_request1)
+      call gamil_arrays_comm(COMM_TO_RIGHT,1,DU(:,beglatexdyn,1),DV(:,beglatexdyn,1),DTT(:,beglatexdyn,1),request_id=icomm_request2)
+      call wait_icomm_request(icomm_request1)
+      call wait_icomm_request(icomm_request2)
+      call t_stopf("DIFUVT COMM")
 
 !
 	RETURN

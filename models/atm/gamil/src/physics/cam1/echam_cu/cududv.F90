@@ -34,7 +34,7 @@ SUBROUTINE cududv(klon,klev,klevp1,ktopm2,ktype,kcbot,paphp1, &
 &           pud(klon,klev), puen(klon,klev), puu(klon,klev), pvd(klon,klev), &
 &           pven(klon,klev), pvu(klon,klev)
   INTEGER, INTENT (IN) :: kcbot(klon), ktype(klon)
-  LOGICAL(r8), INTENT (IN) :: ldcum(klon)
+  LOGICAL, INTENT (IN) :: ldcum(klon)
 
   !  Scalar arguments with intent(InOut):
 

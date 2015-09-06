@@ -64,26 +64,25 @@ subroutine oznini
 
    nm = 1
    np = 2
-!
-! SPMD: Master does all the work.  Sends needed info to slaves
-!
-   if (masterproc) then
+
 !
 ! Use year information only if not cycling ozone dataset
 !
-      calday = get_curr_calday()
-      if ( is_perpetual() ) then
-         call get_perp_date(yr, mon, day, ncsec)
-      else
-         call get_curr_date(yr, mon, day, ncsec)
-      end if
-        yr  = yr+timediff  ! ljli
-      ncdate = yr*10000 + mon*100 + day
-      if (ozncyc) then
-         caldayloc = calday
-      else
-         caldayloc = calday + yr*365.
-      end if
+   calday = get_curr_calday()
+   if ( is_perpetual() ) then
+      call get_perp_date(yr, mon, day, ncsec)
+   else
+      call get_curr_date(yr, mon, day, ncsec)
+   end if
+   yr  = yr+timediff  ! ljli
+   ncdate = yr*10000 + mon*100 + day
+   if (ozncyc) then
+      caldayloc = calday
+   else
+      caldayloc = calday + yr*365.
+   end if
+
+   if (masterproc) then
 !
 ! Get and check dimension info
 !
@@ -109,16 +108,23 @@ subroutine oznini
          write(6,*)'OZNINI: Data must be ordered lon, lev, lat, time'
          call endrun
       end if
+   end if
+
+   call mpibcast (timesiz, 1, mpiint, 0, mpicom)
+   call mpibcast (levsiz, 1, mpiint, 0, mpicom)
+   allocate (date_oz(timesiz))
+   allocate (sec_oz(timesiz))
+   allocate (pin(levsiz))
+   allocate (ozmixm(plond,levsiz,plat,2))
+   allocate (ozmix(plond,levsiz,plat))
+
+
+   if (masterproc) then
 !
 ! Dynamically allocated memory for module comozp 
 !
       allocate (ozlon(lonsiz))
       allocate (ozlat(latsiz))
-      allocate (date_oz(timesiz))
-      allocate (sec_oz(timesiz))
-      allocate (pin(levsiz))
-      allocate (ozmixm(plond,levsiz,plat,2))
-      allocate (ozmix(plond,levsiz,plat))
 !
 ! Locally dynamic that will be deallocated before "return"
 !
@@ -158,56 +164,65 @@ subroutine oznini
             end if
          end do
       end if
+   end if
 
-      strt4(1) = 1
-      strt4(2) = 1
-      strt4(3) = 1
-      cnt4(1)  = lonsiz
-      cnt4(2)  = levsiz
-      cnt4(3)  = latsiz
-      cnt4(4)  = 1
+   call mpibcast (date_oz, timesiz, mpiint, 0, mpicom)
+   call mpibcast (sec_oz, timesiz, mpiint, 0, mpicom)
+   call mpibcast (pin, levsiz, mpir8, 0, mpicom)
+
+   strt4(1) = 1
+   strt4(2) = 1
+   strt4(3) = 1
+   cnt4(1)  = lonsiz
+   cnt4(2)  = levsiz
+   cnt4(3)  = latsiz
+   cnt4(4)  = 1
 !
 ! Special code for interpolation between December and January
 !
-      if (ozncyc) then
-         n = 12
-         np1 = 1
-         call bnddyi(date_oz(n  ), sec_oz(n  ), cdayozm)
-         call bnddyi(date_oz(np1), sec_oz(np1), cdayozp)
-         if (caldayloc <= cdayozp .or. caldayloc > cdayozm) then
+   if (ozncyc) then
+      n = 12
+      np1 = 1
+      call bnddyi(date_oz(n  ), sec_oz(n  ), cdayozm)
+      call bnddyi(date_oz(np1), sec_oz(np1), cdayozp)
+      if (caldayloc <= cdayozp .or. caldayloc > cdayozm) then
+         if (masterproc) then
             strt4(4) = n
             call wrap_get_vara_realx (ncid_oz,oznid,strt4,cnt4,oznbdym)
-
             strt4(4) = np1
             call wrap_get_vara_realx (ncid_oz,oznid,strt4,cnt4,oznbdyp)
-            goto 10
          end if
+         goto 10
       end if
+   end if
 !
 ! Normal interpolation between consecutive time slices.
 !
-      do n=1,timesiz-1
-         np1 = n + 1
-         call bnddyi(date_oz(n  ), sec_oz(n  ), cdayozm)
-         call bnddyi(date_oz(np1), sec_oz(np1), cdayozp)
-         if (.not.ozncyc) then
-            yr = date_oz(n)/10000
-            cdayozm = cdayozm + yr*365.
-            yr = date_oz(np1)/10000
-            cdayozp = cdayozp + yr*365.
-         end if
-         if (caldayloc > cdayozm .and. caldayloc <= cdayozp) then
+   do n=1,timesiz-1
+      np1 = n + 1
+      call bnddyi(date_oz(n  ), sec_oz(n  ), cdayozm)
+      call bnddyi(date_oz(np1), sec_oz(np1), cdayozp)
+      if (.not.ozncyc) then
+         yr = date_oz(n)/10000
+         cdayozm = cdayozm + yr*365.
+         yr = date_oz(np1)/10000
+         cdayozp = cdayozp + yr*365.
+      end if
+      if (caldayloc > cdayozm .and. caldayloc <= cdayozp) then
+         if (masterproc) then
             strt4(4) = n
             call wrap_get_vara_realx (ncid_oz,oznid,strt4,cnt4,oznbdym)
-
             strt4(4) = np1
             call wrap_get_vara_realx (ncid_oz,oznid,strt4,cnt4,oznbdyp)
-            goto 10
          end if
-      end do
-      write(6,*)'OZNINI: Failed to find dates bracketing ncdate, ncsec=', ncdate, ncsec
-      call endrun
+         goto 10
+      end if
+  end do
+  write(6,*)'OZNINI: Failed to find dates bracketing ncdate, ncsec=', ncdate, ncsec
+  call endrun
 10    continue
+
+   if (masterproc) then
       write(6,*)'OZNINI: Read ozone data for dates ',date_oz(n), &
                 sec_oz(n),' and ',date_oz(np1),sec_oz(np1)
 !
@@ -255,14 +270,8 @@ subroutine oznini
       deallocate (tmpozmix)
    end if
 
-#if ( defined SPMD )
-   call mpibcast (levsiz, 1, mpiint, 0, mpicom)
-   if (.not.masterproc) then
-      allocate (pin(levsiz))
-      allocate (ozmix(plond,levsiz,plat))
-   end if
-   call mpibcast (pin, levsiz, mpir8, 0, mpicom)
-#endif
+   call mpibcast(ozmixm(1,1,1,nm), plond*levsiz*plat, mpir8, 0, mpicom)
+   call mpibcast(ozmixm(1,1,1,np), plond*levsiz*plat, mpir8, 0, mpicom)
 
    return
 end subroutine oznini

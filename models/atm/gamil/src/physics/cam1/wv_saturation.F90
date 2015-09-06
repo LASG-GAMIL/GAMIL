@@ -58,7 +58,7 @@ contains
 
         ! DONG Li: Print error message about "td" out of range (tmin, tmax)
 
-        if ((td < tmin .or. td > tmax) .and. masterproc) then
+        if ((td < tmin .or. td > tmax) .and. masterproc .and. .false.) then
             write(*, "('Error: wv_saturation::estblf: ')", advance="no")
             write(*, "('Input temperature td is out of range (tmin, tmax)')")
             write(*, "('  td   = ', F)") td

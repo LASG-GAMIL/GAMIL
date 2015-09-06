@@ -77,7 +77,8 @@ module phys_grid
    use ppgrid, only: pcols, pver, begchunk, endchunk
    use pmgrid, only: plon, plat, beglat, endlat
 #if ( defined SPMD )
-   use spmd_dyn, only: proc, npes
+   use spmd_dyn, only: npes
+   use mpi_gamil, only: lat_local_proc_id
    use mpishorthand
 #endif
 
@@ -186,6 +187,13 @@ module phys_grid
                                        ! and physics decompositions does not require 
                                        ! interprocessor communication
 
+   ! Added by Li Ruizhe
+   integer, allocatable :: chunk_ncols(:)
+   integer, allocatable :: chunk_lat(:,:)
+   integer, allocatable :: chunk_lon(:,:)
+   integer, allocatable :: chunk_pid(:,:)
+   integer, allocatable :: lchunk_to_chunk(:)
+
 contains
 !========================================================================
 
@@ -251,7 +259,7 @@ contains
 !
 ! Set decomposition options
 !
-   opt = 3
+   opt = 1
    chunks_per_thread = 1
 
 ! Initialize physics grid, using dynamics grid
@@ -307,7 +315,7 @@ contains
 !
       do j=1,plat
 #if (defined SPMD)
-         chunks(j)%owner = proc(j)
+         chunks(j)%owner = get_block_owner_d(j,1)
 #else
          chunks(j)%owner = 0
 #endif
@@ -395,7 +403,7 @@ contains
             block_cnt = get_block_coord_cnt_d(glon,glat)
             call get_block_coord_d(glon,glat,block_cnt,blockids,bcids)
             do jb=1,block_cnt
-               owner_d = get_block_owner_d(blockids(jb)) 
+               owner_d = get_block_owner_d(blockids(jb),bcids(jb)) 
                if (owner_d .ne. chunks(cid)%owner) then
                   local_dp_map = .false.   
                endif
@@ -484,7 +492,7 @@ contains
          block_cnt = get_block_coord_cnt_d(glon,glat)
          call get_block_coord_d(glon,glat,block_cnt,blockids,bcids)
          do jb = 1,block_cnt
-            owner_d = get_block_owner_d(blockids(jb))
+            owner_d = get_block_owner_d(blockids(jb),bcids(jb))
             if (iam == owner_d) then
                if (.not. associated(btofc_blk_offset(blockids(jb))%pter)) then
                   blksiz = get_block_col_cnt_d(blockids(jb))
@@ -527,7 +535,7 @@ contains
                block_cnt = get_block_coord_cnt_d(glon,glat)
                call get_block_coord_d(glon,glat,block_cnt,blockids,bcids)
                do jb = 1,block_cnt
-                  owner_d = get_block_owner_d(blockids(jb))
+                  owner_d = get_block_owner_d(blockids(jb),bcids(jb))
                   if (p == owner_d) then
                      numlvl = get_block_lvl_cnt_d(blockids(jb),bcids(jb))
                      call get_block_levels_d(blockids(jb),bcids(jb),numlvl,levels)
@@ -548,6 +556,24 @@ contains
 !
    physgrid_set = .true.   ! Set flag indicating physics grid is now set
 !
+
+!Added by Li Ruizhe
+   allocate(chunk_lat(1:pcols, 1:nchunks))
+   allocate(chunk_lon(1:pcols, 1:nchunks))
+   allocate(chunk_pid(1:pcols, 1:nchunks))
+   allocate(chunk_ncols(1:nchunks))
+   allocate(lchunk_to_chunk(1:(nchunks+lastblock)))
+   lchunk_to_chunk(:) = -1
+   do i = 1, nchunks
+      chunk_ncols(i) = chunks(i)%ncols
+      lchunk_to_chunk(chunks(i)%lchunk) = i
+      do j = 1, chunk_ncols(i)
+          chunk_lat(j,i) = chunks(i)%lat(j)
+          chunk_lon(j,i) = chunks(i)%lon(j)
+          chunk_pid(j,i) = chunks(i)%owner
+      enddo
+   enddo
+
    return
    end subroutine phys_grid_init
 !
@@ -1216,10 +1242,9 @@ logical function chunk_index (idx)
    integer :: lcid                       ! local chunk id
    integer :: lid                        ! local longitude index
 
-#if ( defined SPMD )
-   real(r8) gfield_p(fdim,mdim,ldim,ngcols) 
+   real(r8),allocatable :: gfield_p(:,:,:,:) 
                                          ! vector to be scattered
-   real(r8) lfield_p(fdim,mdim,ldim,nlcols) 
+   real(r8),allocatable :: lfield_p(:,:,:,:) 
                                          ! local component of scattered
                                          !  vector
    integer :: displs(0:npes-1)           ! scatter displacements
@@ -1227,10 +1252,11 @@ logical function chunk_index (idx)
    integer :: recvcnt                    ! scatter receive count
    integer :: beglcol                    ! beginning index for local columns
                                          !  in global column ordering
-#endif
 
 !-----------------------------------------------------------------------
-#if ( defined SPMD )
+
+   allocate(gfield_p(fdim,mdim,ldim,ngcols), lfield_p(fdim,mdim,ldim,nlcols))
+
    displs(0) = 0
    sndcnts(0) = fdim*mdim*ldim*gs_col_num(0)
    beglcol = 0
@@ -1290,28 +1316,9 @@ logical function chunk_index (idx)
          end do
       end do
    end do
-#else
 
-! copy field into chunked data structure
-! (pgcol ordering chosen to reflect begchunk:endchunk 
-!  local ordering)
-
-   do l=1,ldim
-      do i=1,ngcols
-         cid = pgcols(i)%chunk
-         lcid = chunks(cid)%lchunk
-         lid = pgcols(i)%ccol
-         do m=1,mdim
-            do f=1,fdim
-               localchunks(f,lid,m,lcid,l) = &
-                  globalfield(f,chunks(cid)%lon(lid), m, &
-                              chunks(cid)%lat(lid),l)
-            end do
-         end do
-      end do
-   end do
-
-#endif
+   deallocate(gfield_p)
+   deallocate(lfield_p)
 
    return
    end subroutine scatter_field_to_chunk
@@ -1613,10 +1620,9 @@ logical function chunk_index (idx)
    integer :: lcid                       ! local chunk id
    integer :: lid                        ! local longitude index
 
-#if ( defined SPMD )
-   real(r8) gfield_p(fdim,mdim,ldim,ngcols) 
+   real(r8),allocatable :: gfield_p(:,:,:,:) 
                                          ! vector to be gathered
-   real(r8) lfield_p(fdim,mdim,ldim,nlcols) 
+   real(r8),allocatable :: lfield_p(:,:,:,:) 
                                          ! local component of gather
                                          !  vector
    integer :: displs(0:npes-1)           ! gather displacements
@@ -1624,10 +1630,11 @@ logical function chunk_index (idx)
    integer :: sendcnt                    ! gather send counts
    integer :: beglcol                    ! beginning index for local columns
                                          !  in global column ordering
-#endif
 
 !-----------------------------------------------------------------------
-#if ( defined SPMD )
+
+   allocate(gfield_p(fdim,mdim,ldim,ngcols), lfield_p(fdim,mdim,ldim,nlcols))
+
    displs(0) = 0
    rcvcnts(0) = fdim*mdim*ldim*gs_col_num(0)
    beglcol = 0
@@ -1686,27 +1693,8 @@ logical function chunk_index (idx)
       end do
    endif
 
-#else
-
-   ! copy chunked data structure into lon/lat field
-   ! (pgcol ordering chosen to reflect begchunk:endchunk 
-   !  local ordering)
-   do l=1,ldim
-      do i=1,ngcols
-         cid = pgcols(i)%chunk
-         lcid = chunks(cid)%lchunk
-         lid = pgcols(i)%ccol
-         do m=1,mdim
-            do f=1,fdim
-               globalfield(f,chunks(cid)%lon(lid), m, &
-                           chunks(cid)%lat(lid),l)    &
-               = localchunks(f,lid,m,lcid,l)
-            end do
-         end do
-      end do
-   end do
-
-#endif
+   deallocate(gfield_p)
+   deallocate(lfield_p)
 
    return
    end subroutine gather_chunk_to_field
@@ -2518,7 +2506,7 @@ logical function chunk_index (idx)
          npcolumns(p) = 0
       enddo
       do jb=firstblock,lastblock
-         p = get_block_owner_d(jb)
+         p = get_block_owner_d(jb,1)
          npcolumns(p) = npcolumns(p) + get_block_col_cnt_d(jb)
       enddo
 !
@@ -2561,7 +2549,7 @@ logical function chunk_index (idx)
       enddo
 !
       do jb=firstblock,lastblock
-         p = get_block_owner_d(jb)
+         p = get_block_owner_d(jb,1)
          blksiz = get_block_col_cnt_d(jb)
          do ib = 1,blksiz
             cid = cid_offset(p) + local_cid(p)
@@ -2710,7 +2698,7 @@ logical function chunk_index (idx)
          npcolumns(p) = 0
       enddo
       do jb=firstblock,lastblock
-         p = get_block_owner_d(jb)
+         p = get_block_owner_d(jb,1)
          npcolumns(p) = npcolumns(p) + get_block_col_cnt_d(jb)
       enddo
 !
@@ -2757,7 +2745,7 @@ logical function chunk_index (idx)
       enddo
 !
       do jb=firstblock,lastblock
-         p = get_block_owner_d(jb)
+         p = get_block_owner_d(jb,1)
          blksiz = get_block_col_cnt_d(jb)
          do ib = 1,blksiz
             cid = cid_offset(p) + local_cid(p)
@@ -2869,7 +2857,7 @@ logical function chunk_index (idx)
          glat = chunks(cid)%lat(1) 
          block_cnt = get_block_coord_cnt_d(glon,glat)
          call get_block_coord_d(glon,glat,block_cnt,blockids,bcids)
-         chunks(cid)%owner = get_block_owner_d(blockids(1)) 
+         chunks(cid)%owner = get_block_owner_d(blockids(1),bcids(1)) 
       enddo
    else
 !
@@ -2911,7 +2899,7 @@ logical function chunk_index (idx)
             block_cnt = get_block_coord_cnt_d(glon,glat)
             call get_block_coord_d(glon,glat,block_cnt,blockids,bcids)
             do jb=1,block_cnt
-               p = get_block_owner_d(blockids(jb)) 
+               p = get_block_owner_d(blockids(jb),bcids(jb)) 
                column_count(p) = column_count(p) + 1
             enddo
          enddo

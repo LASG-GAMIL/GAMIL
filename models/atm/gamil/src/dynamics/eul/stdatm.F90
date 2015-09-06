@@ -8,6 +8,7 @@ module stdatm
    use shr_kind_mod, only: r8 => shr_kind_r8
    use pmgrid, only: plond, beglatexdyn, endlatexdyn, plevstd
    use infnan
+   use comfm1
 
    implicit none
 
@@ -17,8 +18,6 @@ module stdatm
       real(r8) :: dcbb(plevstd)         
       real(r8) :: p00, t00              
 
-      real(r8),allocatable :: psb (:,:)      
-      real(r8),allocatable :: tsb (:,:)      
 
 CONTAINS
 
@@ -26,8 +25,6 @@ CONTAINS
 !
 ! Purpose:  Allocate and initialize the arrays of the standard atmosphere.
 !
-      allocate (psb (plond, beglatexdyn:endlatexdyn))
-      allocate (tsb (plond, beglatexdyn:endlatexdyn))
 
       tbb (:) = inf
       hbb (:) = inf

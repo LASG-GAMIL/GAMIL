@@ -3,27 +3,17 @@
 
 !     Define the parameters related to the model resolution
 
-#if (defined SPMD)
-      integer nprocessor
-#if defined COUP_CSM
-      parameter(nprocessor=NTASK)            !by LPF
-#else
-      parameter(nprocessor=30)
-#endif
-#endif
-
       INTEGER
      _        IM   ! the grid number along the longitude
      _       ,NX   ! NX = IM+2, considering the periodic boundary condition
-     _       ,NY   ! the grid nmuber along the latitude
      _       ,NL   ! the vertical layers
      _       ,NZ   ! NZ = NL + 1, considering the adding boundary in the top atmosphere
      _       ,NA
 
 #if (!defined SPMD)
-      PARAMETER(IM=180,NX=IM+2,NY=90,NL=26,NZ=NL+1)
+      PARAMETER(IM=180,NX=IM+2,NL=26,NZ=NL+1)
 #else
-      PARAMETER(IM=180,NX=IM+2,NY=90/nprocessor+2,NL=26,NZ=NL+1)
+      PARAMETER(IM=180,NX=IM+2,NL=26,NZ=NL+1)
 #endif
 
 !     Define the paramters about the earth and the atmosphere, required by

@@ -396,13 +396,11 @@ contains
 
         implicit none
 
-#include<pdyn.h>              ! sxj---nprocessor display mpiint(module mpishorthand)
-
         integer, intent(in) :: iu  ! Fortran unit number
 
         ! Local variables
         character(len=*), parameter :: sub = 'pbuf_read_restart'
-        integer :: i, ioerr
+        integer :: i, ioerr, npes
         !-----------------------------------------------------------------------------------------
 
         if (masterproc) then
@@ -414,7 +412,8 @@ contains
         endif
 
 #if ( defined SPMD )
-        call mpibcast(old_time_idx, 1, nprocessor, 0, mpicom)
+        call mpi_comm_size (mpicom, npes, ioerr)
+        call mpibcast(old_time_idx, 1, npes, 0, mpicom)
 #endif
 
         do i = 1, pbuf_size

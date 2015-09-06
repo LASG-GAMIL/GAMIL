@@ -4,6 +4,7 @@
 !!(wh 2003.11.12)
 !!-------------------
 
+#if 0
       SUBROUTINE VPDATA(Q,W,DTDSG,EP,NONOS,ISOR,IORD)
 C
 C     PERFORM 1-D ADVECTION IN THE VERTICAL DIRECTION
@@ -289,3 +290,6 @@ C     UPDATE THE PREDICTED FIELD
 
       RETURN
       END
+
+#endif
+

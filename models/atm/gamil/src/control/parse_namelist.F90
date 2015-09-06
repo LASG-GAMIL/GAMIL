@@ -56,6 +56,9 @@ subroutine parse_namelist
 #ifndef COUP_CSM
     use ice_dh, only: prognostic_icesnow,reset_csim_iceprops, icemodel_is
 #endif
+#if ( defined SPMD )
+    use mpi_gamil, only: num_x_proc, num_y_proc
+#endif
 
     use cloudsimulator, only: doisccp                   !!(wh 2005.01.28, following cam3.0)
 
@@ -449,6 +452,9 @@ subroutine parse_namelist
     !
     namelist /atmexp/ ctitle  ,ncdata  ,bndtvs  ,bndtvo  , bndtvg , &
         bndtvaer, & !! sxj-
+#if ( defined SPMD )
+        num_x_proc, num_y_proc, &
+#endif
         rest_pfile,mss_wpass,nsrest  ,mss_irt , archive_dir, &
         nrevsn  ,nhstpr  ,ndens   ,nhtfrq  , &
         nrefrq  ,mfilt   ,absems_data , &
@@ -531,6 +537,12 @@ subroutine parse_namelist
     ! Set anncyc true, no longer in namelist
     !
     anncyc = .true.
+
+#if ( defined SPMD )
+    num_x_proc = 0
+    num_y_proc = 0
+#endif
+
     if (masterproc) then
         !
         ! Read in the atmexp namelist from standard input
@@ -1240,6 +1252,7 @@ subroutine distnl ( scenario_ghg , rampYear_ghg , scenario_so4 , &
     use filenames, only: nrevsn, ncdata, bndtvs, bndtvo, absems_data, bndtvg, &
         mss_wpass, mss_irt, caseid,bndtvaer               !! sxj add bndtvaer
     use cloudsimulator, only: doisccp                   !!(wh 2005.01.28, following cam3.0)
+    use mpi_gamil, only: num_x_proc, num_y_proc
 
 
 
@@ -1374,6 +1387,10 @@ subroutine distnl ( scenario_ghg , rampYear_ghg , scenario_so4 , &
     call mpibcast (rampYear_scon, 1 ,mpiint, 0,mpicom)
     call mpibcast (indirect     , 1 ,mpilog, 0,mpicom)
     call mpibcast (doisccp      , 1 ,mpilog, 0,mpicom)      !!(wh)
+
+    call mpibcast (num_x_proc ,1,mpiint,0,mpicom)
+    call mpibcast (num_y_proc ,1,mpiint,0,mpicom)
+
 
 
     return

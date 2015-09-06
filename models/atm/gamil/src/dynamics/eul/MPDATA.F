@@ -3,7 +3,7 @@
 
 !!(wh 2003.11.11)
 !!---------------------
-
+#if 0
 #if (defined SPMD)
 
        SUBROUTINE MPDATA(Q,U,V,P,DSNP,DSSP,GC,DTDLT,DTDLN
@@ -1098,4 +1098,4 @@ C     UPDATE THE PREDICTED FIELD
 	END
 
 #endif
-
+#endif

@@ -166,6 +166,7 @@ subroutine copy_phis_ghs( phis_tmp )
     use pmgrid
     use prognostics,  only: phis
     use comfm1,       only: ghs
+    use mpi_gamil
 #if ( defined SPMD )
     use mpishorthand
     use spmd_dyn,     only: npes, compute_gsfactors
@@ -189,17 +190,7 @@ subroutine copy_phis_ghs( phis_tmp )
     !! scatter phis_tmp to phis
     !!----------------------------------------------------------------
 
-#if ( defined SPMD )
-
-    numperlat = plond
-    call compute_gsfactors(numperlat, numrecv, numsend, displs)
-
-    call mpiscatterv (phis_tmp, numsend, displs, mpir8, &
-        phis(1,beglat), numrecv, mpir8, 0, mpicom)
-
-#else
-    phis(:plon,:) = phis_tmp(:plon,:)
-#endif
+    call gamil_scatter_2D_array_phys(phis_tmp, beglonex, endlonex, beglat, endlat, phis(beglonex,beglat)) 
 
     !!----------------------------------------------------------------
     !! copy phis to ghs
@@ -209,12 +200,12 @@ subroutine copy_phis_ghs( phis_tmp )
     endj = endlatexdyn - numbnd
     do jdyn = begj,endj
         jcam = beglatexdyn + endlatex - jdyn
-        do i=1,plon
+        do i=beglonex, endlonex
             ghs(i,jdyn) = phis(i,jcam )
         enddo
-        ghs(plond-1,jdyn) = ghs(1,jdyn)
-        ghs(plond,  jdyn) = ghs(2,jdyn)
     enddo
+
+    call gamil_arrays_comm(COMM_ROTATE_LEFT,2,ghs(:,beglatexdyn))
 
     !- check -------------------------------------------------------
     !

@@ -42,6 +42,7 @@ module history
      use pmgrid
 #endif
    use icarus_scops, only: ntau, npres, prlim, taulim   !!(wh 2005.01.28)
+   use mpi_gamil, only: beglonex, endlonex, gamil_gather_3D_array_phys, gamil_gather_2D_array_phys 
 
    implicit none
 
@@ -4014,8 +4015,8 @@ end function sec2hms
          allocate (arr2dxy_local(plon,beglat:endlat))
 #endif
       else
-         allocate (arr2d(plon,beglat:endlat))
-         allocate (arr3d(plon,plev,beglat:endlat))
+         allocate (arr2d(plon,plat))
+         allocate (arr3d(plon,plev,plat))
          allocate (arr2dchnk(pcols,begchunk:endchunk))
          allocate (arr2dmchnk(pcols,plevmx,begchunk:endchunk))
          allocate (arr2dm(1,1,1))
@@ -4106,25 +4107,13 @@ end function sec2hms
 !
 ! output u
 !
-      do j=beglat,endlat
-         endi = i1+nlon(j)-1
-         numi = nlon(j)
-         jcen = j1 - 1 + j
-         arr3d(:numi,:plev,j) = u3(i1:endi,:plev,jcen,n3m2)
-!!       arr3d(:numi,:plev,j) = u3(i1:endi,:plev,jcen,n3m1)
-      end do
+      call gamil_gather_3D_array_phys(arr3d, beglonex,endlonex, beglatex,endlatex, plev, u3(:,:,:,n3m2))
       call gather_put (id, uid, arr3d, numperlat, start3d, count3d)
 
 !
 ! output v
 !
-      do j=beglat,endlat
-         endi = i1+nlon(j)-1
-         numi = nlon(j)
-         jcen = j1 - 1 + j
-         arr3d(:numi,:plev,j) = v3(i1:endi,:plev,jcen,n3m2)
-!!       arr3d(:numi,:plev,j) = v3(i1:endi,:plev,jcen,n3m1)
-      end do
+      call gamil_gather_3D_array_phys(arr3d, beglonex,endlonex, beglatex,endlatex, plev, v3(:,:,:,n3m2))
       call gather_put (id, vid, arr3d, numperlat, start3d, count3d)
 
 #endif
@@ -4150,13 +4139,7 @@ end function sec2hms
       end if
 #else
 
-      do j=beglat,endlat
-         endi = i1+nlon(j)-1
-         numi = nlon(j)
-         jcen = j1 - 1 + j
-         arr3d(:numi,:plev,j) = t3(i1:endi,:plev,jcen,n3m2)
-!!       arr3d(:numi,:plev,j) = t3(i1:endi,:plev,jcen,n3m1)
-      end do
+      call gamil_gather_3D_array_phys(arr3d, beglonex,endlonex, beglatex,endlatex, plev, t3(:,:,:,n3m2))
       call gather_put (id, tid, arr3d, numperlat, start3d, count3d)
 #endif
 
@@ -4186,14 +4169,7 @@ end function sec2hms
          call wrap_put_vara_realx (id, qid, start3d, count3d, arr3dxzy)
       end if
 #else
-
-      do j=beglat,endlat
-         endi = i1+nlon(j)-1
-         numi = nlon(j)
-         jcen = j1 - 1 + j
-         arr3d(:numi,:plev,j) = q3(i1:endi,:plev,1,jcen,n3m2)
-!!       arr3d(:numi,:plev,j) = q3(i1:endi,:plev,1,jcen,n3m1)
-      end do
+      call gamil_gather_3D_array_phys(arr3d, beglonex,endlonex, beglatex,endlatex, plev, q3(:,:,1,:,n3m2))
       call gather_put (id, qid, arr3d, numperlat, start3d, count3d)
 #endif
 
@@ -4226,13 +4202,7 @@ end function sec2hms
       end do
 #else
       do m=2,pcnst+pnats
-         do j=beglat,endlat
-            endi = i1+nlon(j)-1
-            numi = nlon(j)
-            jcen = j1 - 1 + j
-            arr3d(:numi,:plev,j) = q3(i1:endi,:plev,m,jcen,n3m2)
-!!          arr3d(:numi,:plev,j) = q3(i1:endi,:plev,m,jcen,n3m1)
-         end do
+         call gamil_gather_3D_array_phys(arr3d, beglonex,endlonex, beglatex,endlatex, plev, q3(:,:,m,:,n3m2))
          call gather_put (id, tracid(m), arr3d, numperlat, start3d, count3d)
       end do
 #endif
@@ -4260,36 +4230,26 @@ end function sec2hms
       end if
 #else
 
-      do j=beglat,endlat
-         numi = nlon(j)
-         arr2d(:numi,j) = ps(:numi,j,n3m2)
-!!       arr2d(:numi,j) = ps(:numi,j,n3m1)
-      end do
+      call gamil_gather_2D_array_phys(arr2d, beglonex,endlonex, beglat, endlat, ps(:,:,n3m2))
       call gather_put (id, psid, arr2d, numperlat, start2d, count2d)
 #endif
 
+#ifdef STAGGERED
       do j=beglat,endlat
          numi = nlon(j)
-#ifdef STAGGERED
          arr2dxy_local(:numi,j) = phis(:numi,j)
-#else
-         arr2d(:numi,j) = phis(:numi,j)
-#endif
       end do
-
-#ifdef STAGGERED
 #if defined (SPMD)
       if (myid_z .eq. 0) call pargatherreal(comm_y, 0,      &
                   arr2dxy_local, strip2d, arr2d)
 #else
       arr2d(:,:) = arr2dxy_local(:,:)
 #endif
-
       if (masterproc) then
          call wrap_put_vara_realx (id, phisid, start2d, count2d, arr2d)
       end if
 #else
-
+      call gamil_gather_2D_array_phys(arr2d, beglonex,endlonex, beglat, endlat, phis)
       call gather_put (id, phisid, arr2d, numperlat, start2d, count2d)
 #endif
 
@@ -4435,19 +4395,6 @@ end function sec2hms
       real(r8), intent(inout) :: arr(*)! array to be gathered then written
 
 !-----------------------------------------------------------------------
-
-#ifdef SPMD
-      integer :: numrecv(0:npes-1)     ! number of items to be received
-      integer :: displs(0:npes-1)      ! displacement array
-      integer :: numsend               ! number of items to send
-      real(r8), allocatable :: recvbuff(:)
-
-      call compute_gsfactors (numperlat, numsend, numrecv, displs)
-      allocate(recvbuff(sum(numrecv)))
-      call mpigatherv (arr, numsend, mpir8, recvbuff, numrecv, displs, mpir8, 0, mpicom)
-      arr(1:numsend) = recvbuff
-      deallocate(recvbuff)
-#endif
 
       if (masterproc) then
          call wrap_put_vara_realx (fileid, fieldid, start, count, arr)
