@@ -1,18 +1,19 @@
 ! (wanhui 2003.04.01)
 ! -------------------
+
+#include "params.h"
+
 	SUBROUTINE  LATMESH(DY,YTHU,YTHV,WTGU,WTGV)
 
 	IMPLICIT NONE
-
-	INCLUDE 'PARADYN_serial'
 
 	INTEGER NE,NG,I,J,NEE,NGG
 !	PARAMETER(NE=66,NG=64,NEE=6,NGG=9)
 
 !	REAL*8      YTHU1(NE),YTHV1(NE),WTGU1(NE),WTGV1(NE) !FOR E-GRID,LOCAL
 !	REAL*8      YTHU2(NG),  SG (NG),   W2(NG)           !FOR G-GRID,LOCAL
-	REAL*8   DY,YTHU (NY),YTHV (NY),WTGU (NY),WTGV (NY) !FOR H-GRID,OUT
-!	REAL*8      B(NY,NY),M(NY)                          !FOR SPLINE,LOCAL
+	REAL*8   DY,YTHU (PLAT),YTHV (PLAT),WTGU (PLAT),WTGV (PLAT) !FOR H-GRID,OUT
+!	REAL*8      B(PLAT,PLAT),M(PLAT)                          !FOR SPLINE,LOCAL
 
 !-------------- EVEN-AREA GRID -----------------
 !	CALL LATMESH0(DY,YTHU1,YTHV1,WTGU1,WTGV1)
@@ -28,54 +29,54 @@
 !--------------- HYBRID GRID -------------------
 !	DO J=1,NEE
 !	  YTHU(J)     =YTHU1(J)     -PI/2.0d0
-!	  YTHU(NY+1-J)=YTHU1(NE+1-J)-PI/2.0d0
+!	  YTHU(PLAT+1-J)=YTHU1(NE+1-J)-PI/2.0d0
 !	ENDDO
-!	DO J=NEE+1,NY/2
+!	DO J=NEE+1,PLAT/2
 !	  YTHU(J)     =YTHU2(NGG-1+J-NEE)
-!	  YTHU(NY+1-J)=YTHU2(NG+1-(NGG-1+J-NEE))
+!	  YTHU(PLAT+1-J)=YTHU2(NG+1-(NGG-1+J-NEE))
 !	ENDDO
 
 
 !--------- CUBIC SPLINE INTERPOLATION ----------
 !	DY=PI/(NE-1)
-!	DO J=1,NY
-!        DO I=1,NY
+!	DO J=1,PLAT
+!        DO I=1,PLAT
 !	  B(I,J)=0.0d0
 !	ENDDO
 !	ENDDO
 
 !	  B(1,1)    =2.0d0
 !	  B(2,1)    =1.0d0
-!	  B(NY-1,NY)=1.0d0
-!	  B(NY,NY)  =2.0d0
+!	  B(PLAT-1,PLAT)=1.0d0
+!	  B(PLAT,PLAT)  =2.0d0
 !	  M(1)      =(YTHU(2)-YTHU(1)-DY/WTGU1(1))*6.0d0/DY/DY
-!	  M(NY)     =(DY/WTGU1(NE)-YTHU(NY)+YTHU(NY-1))*6.0d0/DY/DY
+!	  M(PLAT)     =(DY/WTGU1(NE)-YTHU(PLAT)+YTHU(PLAT-1))*6.0d0/DY/DY
 
-!	DO J=2,NY-1
+!	DO J=2,PLAT-1
 !	  B(J-1,J) =1.0d0
 !	  B(  J,J) =4.0d0
 !	  B(J+1,J) =1.0d0
 !	  M(J)     =(YTHU(J+1)-2.0d0*YTHU(J)+YTHU(J-1))*6.0d0/DY/DY
 !	ENDDO
 
-!	CALL EQUATION_SOLVER(B,NY,M)
+!	CALL EQUATION_SOLVER(B,PLAT,M)
 
 !	  WTGU(1)=WTGU1(1)
 !	  YTHV(1)=(YTHU(1)+YTHU(2))/2.0d0-DY*DY/16.0d0*(M(1)+M(2))
 !	  WTGV(1)=1.0d0/((YTHU(2)-YTHU(1))/DY-DY/24.0d0*(M(2)-M(1)))
 
-!	DO J=2,NY-1
+!	DO J=2,PLAT-1
 !	  YTHV(J)=(YTHU(J)+YTHU(J+1))/2.0d0-DY*DY/16.0d0*(M(J)+M(J+1))
 !	  WTGU(J)=1.0/((YTHU(J)-YTHU(J-1))/DY+DY/6.0*(2.0*M(j)+M(J-1)))
 !	  WTGV(J)=1.0/((YTHU(J+1)-YTHU(J))/DY-DY/24.0*(M(J+1)-M(J)))
 !	ENDDO
 
-!	  WTGU(NY)=WTGU1(NE)
-!       	  YTHV(NY)=YTHU(NY)
-!	  WTGV(NY)=WTGU(NY)
+!	  WTGU(PLAT)=WTGU1(NE)
+!       	  YTHV(PLAT)=YTHU(PLAT)
+!	  WTGV(PLAT)=WTGU(PLAT)
 
 !------------------------------------------
-!        DO J=1,NY
+!        DO J=1,PLAT
 !	  YTHU(J)=YTHU(J)+PI/2.0d0
 !	  YTHV(J)=YTHV(J)+PI/2.0d0
 !	ENDDO
@@ -92,16 +93,14 @@
 !
 !
         IMPLICIT NONE
-        INCLUDE 'PARADYN_serial'
-!!	REAL PI
-!!	PARAMETER(PI=3.141592653589793)
-	INTEGER NY0
-!	PARAMETER(NY0=66)
-	PARAMETER(NY0=NY)
+	REAL*8 PI
+        PARAMETER(PI=3.141592653589793D0)
+        INTEGER PLAT0
+        PARAMETER(PLAT0=PLAT)
 !
 !     1) INPUT VARIABLE: NONE
-!     2) INPUT CONSTANT: NY0,PI
-!		   NY IS THE GRID NUMBER FOR LATITUDE, DEFINED IN 'PARADYN'
+!     2) INPUT CONSTANT: PLAT0,PI
+!		   PLAT IS THE GRID NUMBER FOR LATITUDE, DEFINED IN 'PARADYN'
 !		   PI IS THE RATIO OF THE CIRCUMFERENCE OF A CIRCLE TO
 !			  ITS DIAMETER, DEFINED IN 'PARADYN'
 !
@@ -109,10 +108,10 @@
 !
 	REAL*8
      _       DY		! MERIDIONAL STEPSIZE
-     _      ,YTHU(NY0)	! LATITUDE AT THE NORNAL MERIDIONAL GRID Yj
-     _      ,YTHV(NY0) ! LATITUDE AT THE HALF-MOVE MERIDIONAL GRID Yj+1/2
-     _      ,WTGU(NY0)	! AREA-WEIGHTING AT THE NORNAL MERIDIONAL GRID Yj
-     _      ,WTGV(NY0)	! AREA-WEIGHTING AT THE HALF-MOVE MERIDIONAL GRID Yj+1/2
+     _      ,YTHU(PLAT0)	! LATITUDE AT THE NORNAL MERIDIONAL GRID Yj
+     _      ,YTHV(PLAT0) ! LATITUDE AT THE HALF-MOVE MERIDIONAL GRID Yj+1/2
+     _      ,WTGU(PLAT0)	! AREA-WEIGHTING AT THE NORNAL MERIDIONAL GRID Yj
+     _      ,WTGV(PLAT0)	! AREA-WEIGHTING AT THE HALF-MOVE MERIDIONAL GRID Yj+1/2
 !
 !     4) WORKING VARIABLES: U,S,DA,A2,U2,A,B,J,M1
 !
@@ -122,9 +121,9 @@
 !
 !     The resolution formula:
 !
-!           DY = (180-10B)/(NY0-1) (in degree) PI(1-B/18)/(NY0-1) (in arc)
+!           DY = (180-10B)/(PLAT0-1) (in degree) PI(1-B/18)/(PLAT0-1) (in arc)
 !
-!           when B=2.0, NY0=41, DY=4 degree; when B=2.0, NY0=81, DY=2 degree
+!           when B=2.0, PLAT0=41, DY=4 degree; when B=2.0, PLAT0=81, DY=2 degree
 !
      _      ,A  ! A  = B/(0.5*PI)
 !				A CONTROL PARAMETER RELATED TO THE AREA-SIZE COMPUTING
@@ -137,7 +136,7 @@
      _      ,U2 ! U2 = (1-B/3)^2	 NEEDED WHEN CALCULATE YTHU, YTHV
 	INTEGER
      _       J  ! AN INTEGER VARIABLE FOR LOOPS IN THIS SUBROUTINE
-     _      ,M1 ! M1 = NY0-1
+     _      ,M1 ! M1 = PLAT0-1
 !
 !	Description of the even-area method	developed by Bin Wang in 2000:
 !
@@ -150,7 +149,7 @@
 !     AS(theta)=AS(PI/3)+[1-(1-a*theta+a*PI/3)^2]/(2a) when  PI/3< theta<= PI/2
 !     where a= b/(0.5*Pi), 0<b<1, b=1.0-0.25*sqrt(25/(m1-20))
 !
-!	Suppose the total area-size of the whole region S is partitioned into NY0-1
+!	Suppose the total area-size of the whole region S is partitioned into PLAT0-1
 !	equal small area: AS(theta(j+1))-AS(theta(j))=DY=constant, then theta(j)
 !	can be calculated according to the formula of AS. Obviously,
 !     theta(j+1)-theta(j) will not be a constant when they are not in the interval
@@ -160,7 +159,7 @@
 !	Note that: the physical mesh is not even, but the computing mesh is, which
 !	makes the meridional discretization easy.
 !
-	M1= NY0-1
+	M1= PLAT0-1
 C
         B = 2.0
 	A  = B*2.0D0/PI
@@ -202,8 +201,8 @@ C
 	   END IF
 	END DO
 !
-	YTHV(NY0)=PI
-	WTGV(NY0)=1.0D0-A*(PI*0.5-PI/3.0)
+	YTHV(PLAT0)=PI
+	WTGV(PLAT0)=1.0D0-A*(PI*0.5-PI/3.0)
 !
 	RETURN
 	END
