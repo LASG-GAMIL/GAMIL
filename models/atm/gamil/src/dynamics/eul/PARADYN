@@ -10,11 +10,7 @@
      _       ,NZ   ! NZ = NL + 1, considering the adding boundary in the top atmosphere
      _       ,NA
 
-#if (!defined SPMD)
-      PARAMETER(IM=180,NX=IM+2,NL=26,NZ=NL+1)
-#else
-      PARAMETER(IM=180,NX=IM+2,NL=26,NZ=NL+1)
-#endif
+      PARAMETER(IM=PLON,NX=IM+2,NL=PLEV,NZ=NL+1)
 
 !     Define the paramters about the earth and the atmosphere, required by
 !     the model atmosphere
@@ -34,11 +30,7 @@
      _      ,DPALIB ! the interval of two adjoining levels
 !
       PARAMETER(RAD=6371000.0D0, OMGA=0.7292D-4, GRAVIT=9.806D0
-!     _         ,RD =287.0D0,CP=1004.6D0,CAPA=RD/CP,T0=288.15D0
-!     _         ,P0 =1013.25D0, PI=3.141592653589793D0)
      _         ,RD =287.0D0,CP=1004.6D0,CAPA=RD/CP,CPD=CP
      _         ,PI=3.141592653589793D0)
-!      PARAMETER ( PEALIB=1160.0D0,DPALIB=2.5D0,NA=PEALIB/DPALIB )
-*     PARAMETER ( PEALIB=1160.0D0,DPALIB=5.0D0,NA=PEALIB/DPALIB )
       PARAMETER ( PEALIB=1160.0D0,DPALIB=0.5D0,NA=PEALIB/DPALIB )
-!
+
