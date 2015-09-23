@@ -136,6 +136,10 @@
 
    endif
 
+      deallocate (ukk)
+      deallocate (vkk)
+      deallocate (tkk)
+
       call t_stopf('hdifus')
 
    return

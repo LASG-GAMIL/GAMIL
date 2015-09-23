@@ -1264,8 +1264,10 @@ subroutine vert_interpolate (Match_ps, pint, n, AEROSOL_mass, ncol, c)
                     else if (pint(i,k) .gt. p2) then
                         AEROSOL(i,k,m) = 0.0_r8
                     else
-                        dpu = pint(i,k)-M_hyai(kupper(i))*M_p0-M_hybi(kupper(i))*Match_ps(i)
-                        dpl = M_hyai(kupper(i)+1)*M_p0+M_hybi(kupper(i)+1)*Match_ps(i)-pint(i,k)
+                        p1 = M_hyai(kupper(i))*M_p0+M_hybi(kupper(i))*Match_ps(i)
+                        p2 = M_hyai(kupper(i)+1)*M_p0+M_hybi(kupper(i)+1)*Match_ps(i)
+                        dpu = pint(i,k)-p1
+                        dpl = p2-pint(i,k)
                         AEROSOL(i,k,m) = &
                             (AEROSOLc(i,kupper(i)  ,c,m,n)*dpl + &
                              AEROSOLc(i,kupper(i)+1,c,m,n)*dpu)/(dpl + dpu)
