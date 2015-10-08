@@ -37,6 +37,7 @@ subroutine parse_namelist
     use pmgrid
     use history
     use comhd,        only: dfs0    !!(wh 2004.04.14)
+    use commap, only: latmesh_b
     use shr_orb_mod
     use so4bnd_IPCC    !!(wh)
     use so4bnd
@@ -466,7 +467,7 @@ subroutine parse_namelist
         calendar, dtime, nelapse, nestep, start_ymd, start_tod, dtdy, & !!(wh)
         stop_ymd, stop_tod, ref_ymd, ref_tod, perpetual_run,  &
         perpetual_ymd,   precc_thresh, precl_thresh, &
-        eps     ,dfs0    ,                  iradsw  , &
+        eps     ,dfs0    , latmesh_b,       iradsw  , &
         iradlw  ,iradae  ,itsst   ,nlvdry  ,sstcyc  , &
         ozncyc  , &
         pertlim , &
@@ -1242,6 +1243,7 @@ subroutine distnl ( scenario_ghg , rampYear_ghg , scenario_so4 , &
     use tracers, only: nusr_adv, nusr_nad
     use moistconvection, only: convection_scheme                     !!(wh 2004.12.17)
     use comhd,   only: dfs0                                          !!(wh 2004.04.14)
+    use commap, only: latmesh_b
     !! use time_manager, only: calendar, dtime, nestep, nelapse, &
     use time_manager, only: calendar, dtime, nestep, nelapse, dtdy,& !!(wh 2004.04.14)
         start_ymd, start_tod, stop_ymd, stop_tod, ref_ymd, ref_tod, &
@@ -1329,6 +1331,7 @@ subroutine distnl ( scenario_ghg , rampYear_ghg , scenario_so4 , &
     call mpibcast (tauvis  ,1,mpir8,0,mpicom)
     call mpibcast (eps     ,1,mpir8,0,mpicom)
     call mpibcast (dfs0    ,1,mpir8,0,mpicom)   !!(wh 2004.04.14)
+    call mpibcast (latmesh_b   ,1,mpir8,0,mpicom)   !!(wh 2004.04.14)
     !!   call mpibcast (dif2    ,1,mpir8,0,mpicom)
     !!   call mpibcast (dif4    ,1,mpir8,0,mpicom)
     !!  (2003.07.21)

@@ -91,7 +91,8 @@
 !###############################################
 	SUBROUTINE LATMESH0(DY,YTHU,YTHV,WTGU,WTGV)
 !
-!
+        use commap, only: latmesh_b
+
         IMPLICIT NONE
 	REAL*8 PI
         PARAMETER(PI=3.141592653589793D0)
@@ -161,7 +162,7 @@
 !
 	M1= PLAT0-1
 C
-        B = 2.0
+        B = latmesh_b
 	A  = B*2.0D0/PI
 	A2 = A*2.0D0
 	DA = 1.0D0/A

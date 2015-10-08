@@ -20,7 +20,6 @@ subroutine preset
    use pmgrid
    use tracers,      only: nusr_adv, nusr_nad
    use constituents, only: ch4vmr, n2ovmr, f11vmr, f12vmr, co2vmr
-!! use pspect
    use rgrid
    use shr_orb_mod
    use dycore
@@ -29,14 +28,13 @@ subroutine preset
    use ice_dh, only: prognostic_icesnow,reset_csim_iceprops
 #endif
    use time_manager, only: timemgr_preset
+   use commap, only: latmesh_b
 !-----------------------------------------------------------------------
    implicit none
 !------------------------------Commons----------------------------------
 #include <comadj.h>
 !-----------------------------------------------------------------------
 #include <comctl.h>
-!-----------------------------------------------------------------------
-!!#include <comhd.h>
 !-----------------------------------------------------------------------
 #include <comlun.h>
 !-----------------------------------------------------------------------
@@ -150,7 +148,10 @@ subroutine preset
 !!      dif4   = 0.
 !!   end if
 !!
-    if (dycore_is ('EUL')) dfs0 = 0.02           !!(wh 2004.04.14)
+    if (dycore_is('EUL')) then
+        dfs0 = 0.02
+        latmesh_b = 2
+    end if
 !
 !! No divergence damping
 !!
