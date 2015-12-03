@@ -22,9 +22,8 @@
 
 module cldwat2m
 
-    ! TAG-3
-    ! debug modules
     use pmgrid,         only: masterproc, iam
+    use phys_grid,      only: get_lon_p, get_lat_p
 #ifdef spmd           
     use mpishorthand,   only:mpicom
 #endif
@@ -3030,6 +3029,13 @@ contains
 #endif
                                 doit(i) = 4
                             endif
+                          if (l == iter .and. abs(tsp(i,k)-t(i,k)) >= 5.0_r8) then
+                              print *, "T =", t(i,k), "q =", q(i,k), "Tsp =", tsp(i,k), "qsp =", qsp(i,k)
+                              write(6, *) 'I:', get_lon_p(lchnk, i), 'J:', get_lat_p(lchnk, i)
+                              write(6, *) 'Profile of T:', t(i,:)
+                              write(6, *) 'Profile of Q:', q(i,:)
+                              doit(i) = 3
+                          end if
                         else
                         endif
                     end do              ! do i = 1,ncol
@@ -3052,6 +3058,9 @@ contains
                                 write (6,*) ' findsp not converging at point i, k ', i, k
                                 write (6,*) ' t, q, p, enin ', t(i,k), q(i,k), p(i,k), enin(i)
                                 write (6,*) ' tsp, qsp, enout ', tsp(i,k), qsp(i,k), enout(i)
+                                write(6, *) 'I:', get_lon_p(lchnk, i), 'J:', get_lat_p(lchnk, i)
+                                write(6, *) 'Profile of T:', t(i,:)
+                                write(6, *) 'Profile of Q:', q(i,:)
                                 call endrun ('FINDSP')
                             endif
                         end do
@@ -3069,6 +3078,9 @@ contains
                                 i, k, enin(i), enout(i)
                             write (6,*) ' t, q, p, enin ', t(i,k), q(i,k), p(i,k), enin(i)
                             write (6,*) ' tsp, qsp, enout ', tsp(i,k), qsp(i,k), enout(i)
+                            write(6, *) 'I:', get_lon_p(lchnk, i), 'J:', get_lat_p(lchnk, i)
+                            write(6, *) 'Profile of T:', t(i,:)
+                            write(6, *) 'Profile of Q:', q(i,:)
                             call endrun ('FINDSP')
                         endif
                     end do

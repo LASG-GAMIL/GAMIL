@@ -68,7 +68,6 @@ subroutine stepon
     real(r8) sysstart, sysend    ! sys timestamp at start, end of timestep
 
     real(r8) calday              ! current calendar day
-    real(r8) dsghl(plev)
     integer nseq
 
     integer i, k, lat, j, begj   ! longitude,level,latitude indices
@@ -82,15 +81,6 @@ subroutine stepon
     dtime = get_step_size();         if(masterproc) write(6,*) 'dtime = ', dtime
                                      if(masterproc) write(6,*) 'dtdy  = ', dtdy
     nseq  = dtime/(dtdy-0.01);       if(masterproc) write(6,*) 'nseq  = ', nseq
-    !!
-    !! fm2003 : calculate dsghl for subroutine 'avnegq' at the end of 'qpdata'
-    !!
-    dsghl(1) = 0.0
-    do k=2,plev
-        dsghl(k) = dsig(k-1)/dsig(k)
-    enddo
-
-    if (masterproc) write(6, "('Notice: stepon: dsghl set')")
 
     pmtop = pmtop*0.01d0
 
@@ -215,7 +205,7 @@ subroutine stepon
 
         call a_c_switching(fu, fv, t2, beglat, endlat)   !!(wh 2003.10.28)
 
-        call dynpkg(dtdy, nseq, dsghl)        !!(wh 2003.10.23)
+        call dynpkg(dtdy, nseq)        !!(wh 2003.10.23)
 
         ! prepare data for physics
 

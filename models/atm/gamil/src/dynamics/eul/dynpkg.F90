@@ -1,14 +1,7 @@
 #include <misc.h>
 #include <params.h>
 
-!! (2003.05.18)
-!! (2003.11.13)
-!! (2003.12.01)
-!! (2005.01.28)
-!!------------------------
-
-!!subroutine dynpkg  ( u,v,t,q,pes,ghs,ws,wpa, su,sv,st,sq, dtdy,itime,nseq, dsghl )
-  subroutine dynpkg  (  dtdy,nseq, dsghl )
+subroutine dynpkg(dtdy, nseq)
 
 !----------------------------------------------------------------------- 
 ! 
@@ -20,12 +13,10 @@
    use shr_kind_mod, only: r8 => shr_kind_r8
    use pmgrid
    use prognostics
-   use qadv       
    use commap
    use stdatm  
    use comfm1
    use comhd
-
    use fspan      !!(wh 2003.11.04)
 
 
@@ -44,8 +35,6 @@
 
    real(r8),intent(in   )  :: dtdy               ! timestep size ( dyn core )
    integer, intent(in   )  :: nseq
-   real(r8),intent(in   )  :: dsghl (plev)
-
 
 !---------------------------Local workspace-----------------------------
    real(r8),allocatable :: tkk (:,:,:)      !  for fm2003
@@ -69,22 +58,13 @@
 
      call t_startf('dyfram')
 
-!!      CALL DYFRAM2(NSEQ,DSGHL,IPq                             &
-!!                ,DSNP,DSSP,DTDLN,DTDLT,GC,DTDSG               &
-!!                ,PMTOP,GHS,SINU,SINV,WTGU,WTGV,SIG,SIGL,DSIG  &
-!!                ,CBB,TBB,dtdy,ITIME,SU,SV,ST,SQ              &
-!!                ,PeS,U,V,WS,WPA,T,Q,GHI,PLY,TB)
-
-     
-
-        call dyfram2( nseq,dtdy,itime                                          &
-                     ,u,v,t,q,ws,pes,wpa,ghs,ghi,ply,tb                        &
-                     ,su,sv,st,sq                                              &
-                     ,nonos,iord,isor,ep,ipq,dsnp,dssp,dtdln,dtdlt,gc,dtdsg,dsghl  &
-                     ,pmtop,sig,sigl,dsig                                      &
-                     ,tbb,hbb,cbb,dcbb,psb,tsb                                 &
-                     ,dy,wtgu(begj),wtgv(begj)                                 &
-                     ,dx,sinu,sinv,oux,ouy,ovx,ovy,ff,cur                      &
+        call dyfram2( nseq,dtdy,itime                                  &
+                     ,u,v,t,q,ws,pes,wpa,ghs,ghi,ply,tb                &
+                     ,su,sv,st,sq                                      &
+                     ,pmtop,sig,sigl,dsig                              &
+                     ,tbb,hbb,cbb,dcbb,psb,tsb                         &
+                     ,dy,wtgu(begj),wtgv(begj)                         &
+                     ,dx,sinu,sinv,oux,ouy,ovx,ovy,ff,cur              &
                      ,mm1,mp1,mm2,mp2,mm3,mp3,mdj )
 
 

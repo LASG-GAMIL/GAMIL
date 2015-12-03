@@ -120,7 +120,6 @@
 
       DS0 = RAD*RAD*DX*DY
 
-!$OMP PARALLEL DO PRIVATE (I,J,K)
       DO J = jbeg0, jend0
          QMJ(1,J) = 0.0D0
          DO K = 1, NL

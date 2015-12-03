@@ -27,35 +27,21 @@ subroutine initcom
 !-----------------------------------------------------------------------
    use shr_kind_mod, only: r8 => shr_kind_r8
    use pmgrid
-!! use pspect
-!! use comspe
    use rgrid
-!! use gauaw_mod, only: gauaw
    use commap
-!! use prognostics, only: phis
-   use comfm1, only: ghs
-!! use dynconst, only: rearth, ra, dynconsti
-!! use physconst, only: rair
-   use constituents, only: ppcnst, qmin, qmincg               !!(wh 2003.10.24)
-!! use constituents, only: ppcnst, qmin, qmincg, &
-!!                           isor, iord, ipq, dsnp,dssp, gc, dtdlt,dtdln,dtdsg
-   use qadv, only:  isor, iord, ipq, dsnp,dssp, gc, dtdlt,dtdln,dtdsg,initialize_qadv !!(wh)
-!! use time_manager, only: get_step_size
-   use time_manager, only: get_step_size,dtdy  !! (wh 2004.04.14)
-   use stdatm                           !!(wh 2003.10.23)
-   use comhd                            !!(wh 2003.10.23)
-   use fspan                            !!(wh 2003.10.24)
+   use comfm1,       only: ghs
+   use constituents, only: ppcnst, qmin, qmincg
+   use time_manager, only: get_step_size, dtdy
+   use stdatm
+   use comhd
+   use fspan
 !-----------------------------------------------------------------------
    implicit none
 !-----------------------------------------------------------------------
 #include <comctl.h>
 !-----------------------------------------------------------------------
-!!#include <comfft.h>
-!-----------------------------------------------------------------------
 #include <comhyb.h>
 !-----------------------------------------------------------------------
-!!#include <comhd.h>
-!!----------------------------------------------------------------------
 ! Local workspace
 !
 
@@ -78,37 +64,31 @@ subroutine initcom
 
      begj=beglatexdyn
 
-!!
-!! Set the fm2003 std.atm.
-!!
-     call initialize_stdatm                 !!(wh 2003.10.23)
-     call stdatm0(TBB,CBB,DCBB,HBB,P00,T00 )
-     call setmsa0(TBB,HBB,ghs ,P00,T00,PSB,TSB)
+     call initialize_stdatm
+     call stdatm0(TBB, CBB, DCBB, HBB, P00, T00)
+     call setmsa0(TBB, HBB, ghs , P00, T00, PSB, TSB)
 
-!
      lprint = masterproc .and. .FALSE.
 
      dtime = get_step_size()
-!!
-!! Set vertical layers
-!!
-     call vpar (pmtop,p00,sig,sigl,dsig )
+!
+! Set vertical layers
+!
+     call vpar(pmtop, p00, sig, sigl, dsig)
 
      pmtop = pmtop * 100.0d0
      p00   = p00   * 100.0d0
 
-!!
-!! calculate hypi & hypm for 'inti'
-!!
+!
+! calculate hypi & hypm for 'inti'
+!
      call hycoef
-    
-!!
-!! Initialize commap.
-!!
-     call initialize_fspan                   !!(wh 2003.10.24)
+!
+! Initialize commap.
+!
+     call initialize_fspan
      call span (mm1,mm2,mm3,mp1,mp2,mp3,mdj)
 
-!!     
      call latmesh (dy,ythu(1),ythv(1),wtgu(1),wtgv(1))
 
 
@@ -146,14 +126,6 @@ subroutine initcom
      
      call stdfsc (dfs0,dthdfs,sinu,sinv,wtgu(begj),wtgv(begj),dx,dy   &
                    ,frdt,frds,frdu,frdv,frdp,dxvpn,dxvps)
-
-!!
-!! Set parameters for the advection integration of q-H2O
-!!
-     call initialize_qadv               !!(wh 2003.10.24)
-
-     call conpda (dtdy,dx,dy,sinu,wtgv(begj),dsig,-1.0d0,isor,iord   &
-                          ,ipq,dsnp,dssp,gc,dtdlt,dtdln,dtdsg)
 !
 ! Set minimum mixing ratio for moisture and advected tracers
 !

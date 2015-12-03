@@ -1,39 +1,26 @@
 #include <misc.h>
 #include <params.h>
 
-
-!!      SUBROUTINE DYFRAM2(NSEQ,DSGHL,IP
-!!     _                 ,DSNP,DSSP,DTDLN,DTDLT,GC,DTDSG
-!!     _                 ,PMTOP,GHS,SINU,SINV,WTGU,WTGV,SIG,SIGL,DSIG
-!!     _                 ,CBB,TBB,DTDY,ITIME,UT,VT,TT,QD
-!!     _                 ,PS,U,V,WS,WPA,T,Q,GHI,PLY,TB)
-
-        subroutine dyfram2( nseq,dtdy,itime
+      subroutine dyfram2( nseq,dtdy,itime
      _                   ,u,v,t,q,ws,ps,wpa,ghs,ghi,ply,tb
      _                   ,ut,vt,tt,qd
-     _                   ,nonos,iord,isor,ep,ip,dsnp,dssp,dtdln,dtdlt,gc,dtdsg,dsghl
      _                   ,pmtop,sig,sigl,dsig
      _                   ,tbb,hbb,cbb,dcbb,psb,tsb
      _                   ,dy,wtgu,wtgv
      _                   ,dx,sinu,sinv,oux,ouy,ovx,ovy,ff,cur
      _                   ,mm1,mp1,mm2,mp2,mm3,mp3,mdj )
 
-!     **************************************************
-!     **************************************************
-!
 !     MAIN ROUTINE  OF THE DYNAMIC FRAME CALCULATION
 
       use pmgrid, only: beglatexdyn, endlatexdyn, plat
       use mpi_gamil
       use comfm1, only: P, QT, SU, SV, ST
 
-
       IMPLICIT NONE
 
 #include <PARADYN>
 #include <PARADD>
 
-!
       real*8 dtdy
       INTEGER*4 ITIME
 
@@ -55,12 +42,6 @@
       REAL*8   CBB(NA),TBB(NA),hbb(na),dcbb(na),psb(beglonex:endlonex,beglatexdyn:endlatexdyn)
       REAL*8   tsb(beglonex:endlonex,beglatexdyn:endlatexdyn)
 
-      INTEGER NONOS,IORD,ISOR,IP(NX)
-!
-      REAL*8 EP,DSNP,DSSP,DTDLN(beglatexdyn:endlatexdyn),DTDLT(beglatexdyn:endlatexdyn)
-      REAL*8 GC(beglatexdyn:endlatexdyn),DTDSG(NL)
-      REAL*8  DSGHL(NL)
-C
       REAL*8 U0(beglonex:endlonex,beglatexdyn:endlatexdyn,NL),V0(beglonex:endlonex,beglatexdyn:endlatexdyn,NL)
       REAL*8 W0(beglonex:endlonex,beglatexdyn:endlatexdyn,NL)
       REAL*8 CB(beglonex:endlonex,beglatexdyn:endlatexdyn,NL),TB(beglonex:endlonex,beglatexdyn:endlatexdyn,NL)
@@ -112,24 +93,24 @@ C
       END DO
 
 !$OMP PARALLEL DO PRIVATE (I,J,K,PY,PX,WK5,KPP,WK6,cbt)
-      DO K=1,NL
-       DO J=jbeg0,jend0
+       DO K = 1, NL
+         DO J = jbeg0, jend0
 
-         DO I=ibeg1,iend1
+           DO I = ibeg1, iend1
 !
 ! 	 CALCULATING THE AVERAGE VALUE OF pp AT V-GRID.
 !
-         IF(J.LT.plat) THEN
- 	    PY=0.5D0*(P(I,J)+P(I,J+1))
-         ELSE
- 	    PY=0.0D0
- 	 ENDIF
+            IF (J .LT. plat) THEN
+              PY = 0.5D0*(P(I,J)+P(I,J+1))
+            ELSE
+              PY = 0.0D0
+            END IF
 !
 !	 CALCULATING THE AVERAGE VALUE OF pp AT U-GRID.
 !
-         PX=0.5D0*(P(I,J)+P(I-1,J))
-!
- 	    SU(I,J,K)=PX*UT(I,J,K)
+            PX=0.5D0*(P(I,J)+P(I-1,J))
+
+            SU(I,J,K)=PX*UT(I,J,K)
             SV(I,J,K)=PY*VT(I,J,K)
 !
 !           CALCULATING STT=ST*P*RD/CB.
@@ -139,15 +120,12 @@ C
             WK6=WK5-DFLOAT(KPP)
             CB(I,J,K)=(1.D0-WK6)*CBB(KPP)+WK6*CBB(KPP+1)
             ST(I,J,K)=TT(I,J,K)*P(I,J)*RD/CB(I,J,K)
-
-	 END DO
-      END DO
-!
+          END DO
+        END DO
       END DO
 
-      call gamil_arrays_comm(COMM_TO_LEFT,1,QT(:,beglatexdyn,1),SU(:,beglatexdyn,1),SV(:,beglatexdyn,1),ST(:,beglatexdyn,1))
-      call gamil_arrays_comm(COMM_TO_RIGHT,1,QT(:,beglatexdyn,1),SU(:,beglatexdyn,1),SV(:,beglatexdyn,1),ST(:,beglatexdyn,1))
-
+      call gamil_arrays_comm(COMM_TO_LEFT,  1, QT(:,beglatexdyn,1), SU(:,beglatexdyn,1), SV(:,beglatexdyn,1), ST(:,beglatexdyn,1))
+      call gamil_arrays_comm(COMM_TO_RIGHT, 1, QT(:,beglatexdyn,1), SU(:,beglatexdyn,1), SV(:,beglatexdyn,1), ST(:,beglatexdyn,1))
 !
 !     THE END OF THE TRANSFORMATION
 !
@@ -176,13 +154,6 @@ C
            END DO
          END DO
 
-!!-----------------------------------------------------------------
-
-!!    CALL DYNAMICS(U,V,WS,W0,PS,T,GHI,DP,SU,SV,ST,FAC,FBC     !!(wh 2003.11.04)
-!!    _                  ,GHS          ,DTDY,ITIME,NCYC,contn) !!
-
-       !write(*,*) "sxj--before dynamics"
-
       call dynamics( dtdy,itime,ncyc,
      _               u,v,ws,w0,ps,t,ghi,ghs,dp,su,sv,st,fac,fbc,
      _               pmtop,sigl,dsig,
@@ -191,25 +162,13 @@ C
      _               dx,sinu,sinv,oux,ouy,ovx,ovy,ff,cur,
      _               mm1,mp1,mm2,mp2,mm3,mp3,mdj )
 
-        !write(*,*) "sxj--after dynamics"
-
       ITIME=ITIME+INT(DTDY+0.1)
-
 !
 !     PREDICT WATER VAPOR MIXING RATIO
 !     BY POSITIVE DEFINITE ADVECTION TRANSPORT ALGORITHM
-!     ____________________________
 !
-
-!        CALL QPDATA2(QT,U0,V0,W0,DSGHL
-!     _           ,U,V,WS,NONOS,IORD,ISOR,IP,EP
-!     _           ,DSNP,DSSP,DTDLN,DTDLT,GC,DTDSG)
-
-        CALL QPDATA1(QT,U0,V0,W0,DSGHL
-     _           ,U,V,WS
-     _           ,DSNP,DSSP,DTDLN,DTDLT,GC,DTDSG)
-
-
+      CALL QPDATA(QT, U0, V0, W0, U, V, WS, DTDY, DX, DY,
+     $            SINU, SINV, WTGU, WTGV, DSIG)
 !
 !     GET THE TIME AVERAGED P-SURFACE VERTICAL VELOCITY
 !
