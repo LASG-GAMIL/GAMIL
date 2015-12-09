@@ -2,14 +2,14 @@
 
 <resolution_parameters>
 
-<spectral_grid res="90x180"  nlat="90"  nlon="180" />
+<spectral_grid res="80x180"  nlat="80"  nlon="180" />
 <spectral_grid res="60x128"  nlat="60"  nlon="128" />
 
 <fv_grid       res="2x2.5"   nlat="91"  nlon="144" />
 <fv_grid       res="4x5"     nlat="46"  nlon="72"  />
 <fv_grid       res="10x15"   nlat="19"  nlon="24"  />
 
-<spectral_trunc res="90x180eul"   m="170" n="170" k="170" />
+<spectral_trunc res="80x180eul"   m="170" n="170" k="170" />
 <spectral_trunc res="60x128eul"   m="42"  n="42"  k="42"  />
 
 </resolution_parameters>

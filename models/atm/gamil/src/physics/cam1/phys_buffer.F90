@@ -135,7 +135,7 @@ contains
         pbuf(index)%mdim = mdim
         pbuf(index)%ldim = ldim
 
-        write(6, "('Notice: phys_buffer::pbuf_add: add buffer for ', A10, ' at index', I3)") name, index
+        write(6, "('[Notice]: phys_buffer::pbuf_add: add buffer for ', A10, ' at index', I3)") name, index
 
     end subroutine pbuf_add
 
@@ -257,7 +257,7 @@ contains
         ! for global scope.
         allocate_all = .false.
         if (masterproc) then
-            write(6, "('Notice: phys_buffer::pbuf_allocate: global allocate = ', l, ' buffer size = ', i)") &
+            write(6, "('[Notice]: phys_buffer::pbuf_allocate: global allocate = ', l, ' buffer size = ', i)") &
                 global_allocate_all, pbuf_size
         end if
         ! TAG-2
@@ -277,7 +277,7 @@ contains
                 ldim = pbuf(i)%ldim
                 allocate(pbuf(i)%fld_ptr(fdim,pcols,mdim,begchunk:endchunk,ldim), stat=istat)
                 if (masterproc) then
-                    write(6, "('Notice: phys_buffer::pbuf_allocate: allocate buffer for ', a)") pbuf(i)%name
+                    write(6, "('[Notice]: phys_buffer::pbuf_allocate: allocate buffer for ', a)") pbuf(i)%name
                 end if
                 if (istat /= 0) then
                     call endrun(sub//': ERROR: allocate failed for '//pbuf(i)%name)

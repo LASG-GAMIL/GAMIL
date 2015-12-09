@@ -275,7 +275,6 @@ CONTAINS
 
 ! Call land model driver
 
-!!    write(6,*) 'calling land model driver...'
     call driver (doalb, eccen, obliqr, lambm0, mvelpp)
 
 ! Convert one dimensional land model output data to two dimensional atm data 

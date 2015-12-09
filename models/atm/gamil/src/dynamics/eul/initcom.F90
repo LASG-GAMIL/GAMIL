@@ -3,9 +3,6 @@
 
 subroutine initcom
 
-!! (wanhui 2003.04.30)
-!! (wanhui 2003.07.10)
-!! (wanhui 2004.04.14)
 !----------------------------------------------------------------------- 
 ! 
 ! Purpose: 
@@ -20,159 +17,131 @@ subroutine initcom
 !                    L. Buja, Feb 1996
 !
 !-----------------------------------------------------------------------
-!
-! $Id: initcom.F90,v 1.16.2.2 2002/06/15 13:47:48 erik Exp $
-! $Author: erik $
-!
-!-----------------------------------------------------------------------
-   use shr_kind_mod, only: r8 => shr_kind_r8
-   use pmgrid
-   use rgrid
-   use commap
-   use comfm1,       only: ghs
-   use constituents, only: ppcnst, qmin, qmincg
-   use time_manager, only: get_step_size, dtdy
-   use stdatm
-   use comhd
-   use fspan
-!-----------------------------------------------------------------------
-   implicit none
-!-----------------------------------------------------------------------
+  use shr_kind_mod, only: r8 => shr_kind_r8
+  use pmgrid
+  use rgrid
+  use commap
+  use comfm1,       only: ghs
+  use constituents, only: ppcnst, qmin, qmincg
+  use time_manager, only: get_step_size, dtdy
+  use stdatm
+  use comhd
+  use fspan
+
+  implicit none
+
 #include <comctl.h>
-!-----------------------------------------------------------------------
 #include <comhyb.h>
-!-----------------------------------------------------------------------
-! Local workspace
-!
 
-   integer i           ! longitude index
-   integer j           ! Latitude index
-   integer begj
+  integer i, j, begj, m
 
-   integer m           ! lengendre array index
+  real(r8) pi             ! Mathematical pi (3.14...)
+  real(r8) north,south
 
-   logical lprint      ! Debug print flag
-   integer lat         ! Latitude index
+  real(r8) dtime          ! timestep size [seconds]
 
-   real(r8) pi             ! Mathematical pi (3.14...)
-   real(r8) north,south
+  pi = 4.0*atan(1.0)
 
-   real(r8) dtime          ! timestep size [seconds]
-!
-!-----------------------------------------------------------------------
-     pi = 4.0*atan(1.0)
+  begj = beglatexdyn
 
-     begj=beglatexdyn
+  CALL INITIALIZE_STDATM
+  CALL STDATM0(TBB, CBB, DCBB, HBB, P00, T00)
+  CALL SETMSA0(TBB, HBB, GHS , P00, T00, PSB, TSB)
 
-     call initialize_stdatm
-     call stdatm0(TBB, CBB, DCBB, HBB, P00, T00)
-     call setmsa0(TBB, HBB, ghs , P00, T00, PSB, TSB)
-
-     lprint = masterproc .and. .FALSE.
-
-     dtime = get_step_size()
+  dtime = get_step_size()
 !
 ! Set vertical layers
 !
-     call vpar(pmtop, p00, sig, sigl, dsig)
+  CALL VPAR(PMTOP, P00, SIG, SIGL, DSIG)
 
-     pmtop = pmtop * 100.0d0
-     p00   = p00   * 100.0d0
+  PMTOP = PMTOP * 100.0D0
+  P00   = P00   * 100.0D0
 
 !
 ! calculate hypi & hypm for 'inti'
 !
-     call hycoef
+  call hycoef
 !
 ! Initialize commap.
 !
-     call initialize_fspan
-     call span (mm1,mm2,mm3,mp1,mp2,mp3,mdj)
+  call initialize_fspan
+  CALL SPAN(MM1, MM2, MM3, MP1, MP2, MP3, MDJ)
 
-     call latmesh (dy,ythu(1),ythv(1),wtgu(1),wtgv(1))
+  CALL LATMESH(DY, YTHU(1), YTHV(1), WTGU(1), WTGV(1))
 
+  w(1)    = 1-cos(0.5*ythu(2))
+  w(plat) = w(1) 
 
-      w(1)    = 1-cos(0.5*ythu(2))
-      w(plat) = w(1) 
+  do j = 2, plat/2
+    north = 0.5*( ythu(j-1)+ythu(j) )
+    south = 0.5*( ythu(j+1)+ythu(j) )
+    w(j) = cos(north)-cos(south)
+    w(plat+1-j) = w(j)
+  end do
 
-      do j=2,plat/2
-         north = 0.5*( ythu(j-1)+ythu(j) )
-         south = 0.5*( ythu(j+1)+ythu(j) )
-         w(j) = cos(north)-cos(south)
-         w(plat+1-j) = w(j)
-      enddo
-
-      do j=1,plat
-         clat(j) = ythu(j)-0.5d0*pi     
-      enddo
+  do j = 1, plat
+    clat(j) = ythu(j)-0.5d0*pi     
+  end do
  
-      do lat=1,plat
-         latdeg(lat) = clat(lat)*45./atan(1._r8)
-      end do
-!!
-     dx = pi*2.0/dble(plon)
+  do j = 1, plat
+    latdeg(j) = clat(j)*45./atan(1._r8)
+  end do
 
-     call initialize_hpar                   !!(wh 2003.10.24)
-     call hpar (dx,dy,ythu(begj),ythv(begj),wtgu(begj),wtgv(begj),mdj            &
-                     ,sinu,sinv,oux,ouy,ovx,ovy,ff,cur)
-!!
-!!
-!! Set parameters for horizontal diffusion
-!!
-     call initialize_comhd             !!(wh 2003.10.23)
+  dx = pi*2.0/dble(plon)
 
-!!   dfs0 = 0.02d0                     !!(namelist variable.  wh 2004.04.14)
-     dthdfs = dtime 
+  call initialize_hpar
+  CALL HPAR(DX, DY, YTHU(BEGJ), YTHV(BEGJ), WTGU(BEGJ), WTGV(BEGJ), MDJ, &
+            SINU, SINV, OUX, OUY, OVX, OVY, FF, CUR)
+!
+! Set parameters for horizontal diffusion
+!
+  call initialize_comhd             !!(wh 2003.10.23)
+
+  dthdfs = dtime 
      
-     call stdfsc (dfs0,dthdfs,sinu,sinv,wtgu(begj),wtgv(begj),dx,dy   &
-                   ,frdt,frds,frdu,frdv,frdp,dxvpn,dxvps)
+  CALL STDFSC(DFS0, DTHDFS, SINU, SINV, WTGU(BEGJ), WTGV(BEGJ), DX, DY, &
+              FRDT, FRDS, FRDU, FRDV, FRDP, DXVPN, DXVPS)
 !
 ! Set minimum mixing ratio for moisture and advected tracers
 !
-   qmin(1) = 1.e-12          ! Minimum mixing ratio for moisture
-   do m=2,ppcnst
-      qmin(m) = 0.0
-   end do
+  qmin(1) = 1.e-12          ! Minimum mixing ratio for moisture
+  do m = 2, ppcnst
+    qmin(m) = 0.0
+  end do
 !
 ! Set the minimum mixing ratio for the counter-gradient term.  
 ! Normally this should be the same as qmin, but in order to 
 ! match control case 414 use zero for water vapor.
 !
-   qmincg(1) = 0.
-   do m=2,ppcnst
-      qmincg(m) = qmin(m)
-   end do
+  qmincg(1) = 0.
+  do m = 2, ppcnst
+    qmincg(m) = qmin(m)
+  end do
 !
 !
 ! Determine whether full or reduced grid
 !
-   fullgrid = .true.
-   do j=1,plat
-      if (nlon(j).lt.plon) fullgrid = .false.
-   end do
+  fullgrid = .true.
+  do j = 1, plat
+    if (nlon(j) < plon) fullgrid = .false.
+  end do
 !
 !
 ! Longitude array
 !
-   do lat=1,plat
-      do i=1,nlon(lat)
-         londeg(i,lat) = (i-1)*360./nlon(lat)
-         clon(i,lat)   = (i-1)*2.0*pi/nlon(lat)
-      end do
-   end do
+  do j = 1, plat
+    do i = 1, nlon(j)
+      londeg(i,j) = (i-1)*360./nlon(j)
+      clon(i,j)   = (i-1)*2.0*pi/nlon(j)
+    end do
+  end do
 
 !
 ! Set flag indicating dynamics grid is now defined.
 ! NOTE: this ASSUMES initcom is called after spmdinit.  The setting of nlon done here completes
 ! the definition of the dynamics grid.
 !
-   dyngrid_set = .true.
-
-   return
-
-9910 format( 1x,i3,13f9.5)
-9920 format(/,      13i9)
-
+  dyngrid_set = .true.
 end subroutine initcom
 
 

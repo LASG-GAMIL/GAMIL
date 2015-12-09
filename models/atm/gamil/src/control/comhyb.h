@@ -5,12 +5,6 @@
 !          midpoints    p(k) = hyam(k)*ps0 + hybm(k)*ps
 ! 
 !-----------------------------------------------------------------------
-!
-! vertical level definitions in LASG dynamical core: p = pes*sigma + pt
-!       interfaces   ply(k) = ps*sig (k) + pmtop
-!       midpoints    ply(k) = ps*sigl(k) + pmtop
-!
-!-----------------------------------------------------------------------
       real(r8) hyai(plevp)       ! ps0 component of hybrid coordinate - interfaces
       real(r8) hybi(plevp)       ! ps component of hybrid coordinate - interfaces
       real(r8) hyam(plev)        ! ps0 component of hybrid coordinate - midpoints
@@ -19,7 +13,7 @@
       real(r8) hypi(plevp)       ! reference pressures at interfaces
       real(r8) hypm(plev)        ! reference pressures at midpoints
 
-      real(r8) ps0         ! base state sfc pressure for level definitions
+      real(r8) ps0               ! base state sfc pressure for level definitions
 
 !     Currently, GAMIL uses sigma coordinate.
       real(r8) pmtop

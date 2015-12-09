@@ -1,150 +1,144 @@
 #include <misc.h>
 #include <params.h>
-!
-        subroutine semiu(uuk,hhk,p,du,dps1
-     _                  ,dus,dps0,dtdy,oux,dsig,c0)
-c
-      use pmgrid, only: beglatexdyn,endlatexdyn, plat
-      use mpi_gamil
-        implicit none
+
+      SUBROUTINE SEMIU(UUK, HHK, P, DU, DPS1, DUS, DPS0, DTDY, OUX, DSIG, C0)
+
+      USE PMGRID, ONLY: BEGLATEXDYN, ENDLATEXDYN
+      USE MPI_GAMIL
+
+      IMPLICIT NONE
 
 #include <PARADYN>
 
-        integer i,j,i1,i2,k
-        real*8 uuk(beglonex:endlonex,beglatexdyn:endlatexdyn)
-        real*8 hhk(beglonex:endlonex,beglatexdyn:endlatexdyn)
-        real*8 p(beglonex:endlonex,beglatexdyn:endlatexdyn)
-        real*8 du(beglonex:endlonex,beglatexdyn:endlatexdyn,nl)
-        real*8 dps1(beglonex:endlonex,beglatexdyn:endlatexdyn)
-        real*8 dus(beglonex:endlonex,beglatexdyn:endlatexdyn)
-        real*8 dps0(beglonex:endlonex,beglatexdyn:endlatexdyn)
-        real*8 c0(beglonex:endlonex,beglatexdyn:endlatexdyn)
-        real*8 oux(beglatexdyn:endlatexdyn)
-        real*8 dsig(nl)
-        real*8 dtdy
-        real*8 ai(beglonex:endlonex,jbeg0:jend0),
-     _         bi(beglonex:endlonex,jbeg0:jend0),
-     _         di(beglonex:endlonex,jbeg0:jend0)
-        real*8 dx,us(beglonex:endlonex,jbeg0:jend0),duss(beglonex:endlonex,jbeg0:jend0)
-        real*8 al(nx,jbeg0:jend0,5),ak(nx,jbeg0:jend0),wh(beglonex:endlonex,jbeg0:jend0)
-        integer comm_request_id1, comm_request_id2
-c
-c       Semi-implicit scheme
-c
-c
+      INTEGER I, J, I1, I2, K
+      REAL*8 UUK(BEGLONEX:ENDLONEX,BEGLATEXDYN:ENDLATEXDYN)
+      REAL*8 HHK(BEGLONEX:ENDLONEX,BEGLATEXDYN:ENDLATEXDYN)
+      REAL*8 P(BEGLONEX:ENDLONEX,BEGLATEXDYN:ENDLATEXDYN)
+      REAL*8 DU(BEGLONEX:ENDLONEX,BEGLATEXDYN:ENDLATEXDYN,NL)
+      REAL*8 DPS1(BEGLONEX:ENDLONEX,BEGLATEXDYN:ENDLATEXDYN)
+      REAL*8 DUS(BEGLONEX:ENDLONEX,BEGLATEXDYN:ENDLATEXDYN)
+      REAL*8 DPS0(BEGLONEX:ENDLONEX,BEGLATEXDYN:ENDLATEXDYN)
+      REAL*8 C0(BEGLONEX:ENDLONEX,BEGLATEXDYN:ENDLATEXDYN)
+      REAL*8 OUX(BEGLATEXDYN:ENDLATEXDYN)
+      REAL*8 DSIG(NL)
+      REAL*8 DTDY, DX
+      REAL*8 AI(BEGLONEX:ENDLONEX,JBEG0:JEND0)
+      REAL*8 BI(BEGLONEX:ENDLONEX,JBEG0:JEND0)
+      REAL*8 DI(BEGLONEX:ENDLONEX,JBEG0:JEND0)
+      REAL*8 US(BEGLONEX:ENDLONEX,JBEG0:JEND0)
+      REAL*8 DUSS(BEGLONEX:ENDLONEX,JBEG0:JEND0)
+      REAL*8 AL(NX,JBEG0:JEND0,5)
+      REAL*8 AK(NX,JBEG0:JEND0)
+      REAL*8 WH(BEGLONEX:ENDLONEX,JBEG0:JEND0)
+      INTEGER COMM_REQUEST_ID1, COMM_REQUEST_ID2
 
-        call register_comm_array(beglonex,endlonex,jbeg0,jend0,1,1,1,1,ai(:,jbeg0))
-        call register_comm_array(beglonex,endlonex,jbeg0,jend0,1,1,1,1,bi(:,jbeg0))
-        call register_comm_array(beglonex,endlonex,jbeg0,jend0,1,1,1,1,wh(:,jbeg0))
-        call gamil_arrays_comm(COMM_TO_LEFT,1,p(:,beglatexdyn),uuk(:,beglatexdyn),request_id=comm_request_id1)
-        call gamil_arrays_comm(COMM_TO_RIGHT,1,p(:,beglatexdyn),c0(:,beglatexdyn),uuk(:,beglatexdyn),request_id=comm_request_id2)
+      CALL REGISTER_COMM_ARRAY(BEGLONEX, ENDLONEX, JBEG0, JEND0, 1, 1, 1, 1, AI(:,JBEG0))
+      CALL REGISTER_COMM_ARRAY(BEGLONEX, ENDLONEX, JBEG0, JEND0, 1, 1, 1, 1, BI(:,JBEG0))
+      CALL REGISTER_COMM_ARRAY(BEGLONEX, ENDLONEX, JBEG0, JEND0, 1, 1, 1, 1, WH(:,JBEG0))
+      CALL GAMIL_ARRAYS_COMM(COMM_TO_LEFT,  1, P(:,BEGLATEXDYN), UUK(:,BEGLATEXDYN), REQUEST_ID=COMM_REQUEST_ID1)
+      CALL GAMIL_ARRAYS_COMM(COMM_TO_RIGHT, 1, P(:,BEGLATEXDYN), C0(:,BEGLATEXDYN), UUK(:,BEGLATEXDYN), REQUEST_ID=COMM_REQUEST_ID2)
 
-!$OMP PARALLEL DO PRIVATE (I,J,K)
-        do j=jbeg1,jend1
-          do i=ibeg1,iend1
-            duss(i,j)=0.0d0
-            do k=1,nl
-	          duss(i,j)=duss(i,j)+du(i,j,k)*dsig(k)
-            end do
-          end do
-        end do
+!$OMP PARALLEL DO PRIVATE (I, J, K)
+      DO J = JBEG1, JEND1
+        DO I = IBEG1, IEND1
+          DUSS(I,J) = 0.0D0
+          DO K = 1, NL
+            DUSS(I,J) = DUSS(I,J) + DU(I,J,K)*DSIG(K)
+          END DO
+        END DO
+      END DO
 
-        call wait_icomm_request(comm_request_id1)
-        call wait_icomm_request(comm_request_id2)
+      CALL WAIT_ICOMM_REQUEST(COMM_REQUEST_ID1)
+      CALL WAIT_ICOMM_REQUEST(COMM_REQUEST_ID2)
 
-!$OMP PARALLEL DO PRIVATE (I,J,dx)
-        do j=jbeg1,jend1
-          dx=0.25d0*oux(j)*dtdy
-          do i=ibeg1,iend1
-	      ai(i,j)=dx*c0(i,j)*(p(i+1,j)+p(i,j))
-	      bi(i,j)=dx*c0(i,j)*(p(i,j)+p(i-1,j))
-	      di(i,j)=dx*c0(i-1,j)*(p(i,j)+p(i-1,j))
-              us(i,j)=uuk(i,j)+dtdy*duss(i,j)
-     _                -bi(i,j)*hhk(i,j)+di(i,j)*hhk(i-1,j)
-              wh(i,j)=hhk(i,j)+dtdy*dps1(i,j)*c0(i,j)
-     _                -ai(i,j)*uuk(i+1,j)+bi(i,j)*uuk(i,j)
-          end do
-       end do
-c
-        call gamil_arrays_comm(COMM_TO_RIGHT,1,ai(:,jbeg0),bi(:,jbeg0),wh(:,jbeg0))
+!$OMP PARALLEL DO PRIVATE (I, J, DX)
+      DO J = JBEG1, JEND1
+        DX = 0.25D0*OUX(J)*DTDY
+        DO I = IBEG1, IEND1
+          AI(I,J) = DX*C0(I,J)*(P(I+1,J)+P(I,J))
+          BI(I,J) = DX*C0(I,J)*(P(I,J)+P(I-1,J))
+          DI(I,J) = DX*C0(I-1,J)*(P(I,J)+P(I-1,J))
+          US(I,J) = UUK(I,J)+DTDY*DUSS(I,J)-BI(I,J)*HHK(I,J)+DI(I,J)*HHK(I-1,J)
+          WH(I,J) = HHK(I,J)+DTDY*DPS1(I,J)*C0(I,J)-AI(I,J)*UUK(I+1,J)+BI(I,J)*UUK(I,J)
+        END DO
+      END DO
 
-!$OMP PARALLEL DO PRIVATE (I,J,K,dx,i1,i2)
-        do j=jbeg1,jend1
-           do i=ibeg1,iend1
-              ak(i,j) = 0.0
-              al(i,j,:) = 0.0
-              i1=i-1
-              i2=i+1
-              if (i1.eq.1) i1=nx-1
-              if (i2.eq.nx) i2=2
-              if (i.lt.nx-1) then
-                 al(i,j,1)=-bi(i-1,j)*di(i,j)
-                 al(i,j,2)=1.0d0+bi(i,j)*bi(i,j)+ai(i-1,j)*di(i,j)
-                 al(i,j,3)=-ai(i,j)*bi(i,j)
-                 al(i,j,4)=0.0
-                 al(i,j,5)=us(i,j)-bi(i,j)*wh(i,j)+di(i,j)*wh(i-1,j)
-              else
-                 ak(i,j)= 1.0d0+bi(i,j)*bi(i,j)+ai(i-1,j)*di(i,j)
-                 ak(i1,j)=-bi(i-1,j)*di(i,j)
-                 ak(i2,j)=-ai(i,j)*bi(i,j)
-                 ak(nx-3,j) = ak(2,j)
-                 ak(nx,j)=us(i,j)-bi(i,j)*wh(i,j)+di(i,j)*wh(i-1,j)
-              end if
-           end do
-!
-           al(2,j,4)=al(2,j,1)
-           al(2,j,1)=0.0
-           al(nx-2,j,4)=al(nx-2,j,3)
-           al(nx-2,j,3)=0.0
-        end do
+      CALL GAMIL_ARRAYS_COMM(COMM_TO_RIGHT, 1, AI(:,JBEG0), BI(:,JBEG0), WH(:,JBEG0))
 
-        call t_startf("GAUSS")
-        call gauss(al,ak,nx)
+!$OMP PARALLEL DO PRIVATE (I,J,K,DX,I1,I2)
+      DO J = JBEG1, JEND1
+        DO I = IBEG1, IEND1
+          AK(I,J)   = 0.0
+          AL(I,J,:) = 0.0
+          I1 = I-1
+          I2 = I+1
+          IF (I1 .EQ. 1) I1 = NX-1
+          IF (I2 .EQ. NX) I2 = 2
+          IF (I .LT. NX-1) THEN
+            AL(I,J,1) = -BI(I-1,J)*DI(I,J)
+            AL(I,J,2) = 1.0D0+BI(I,J)*BI(I,J)+AI(I-1,J)*DI(I,J)
+            AL(I,J,3) = -AI(I,J)*BI(I,J)
+            AL(I,J,4) = 0.0
+            AL(I,J,5) = US(I,J)-BI(I,J)*WH(I,J)+DI(I,J)*WH(I-1,J)
+          ELSE
+            AK(I,J)    = 1.0D0+BI(I,J)*BI(I,J)+AI(I-1,J)*DI(I,J)
+            AK(I1,J)   = -BI(I-1,J)*DI(I,J)
+            AK(I2,J)   = -AI(I,J)*BI(I,J)
+            AK(NX-3,J) = AK(2,J)
+            AK(NX,J)   = US(I,J)-BI(I,J)*WH(I,J)+DI(I,J)*WH(I-1,J)
+          END IF
+        END DO
 
-        do j=jbeg1,jend1  
-           al(nx-1,j,5)=ak(nx,j)
-        enddo
-        call t_stopf("GAUSS")
+        AL(2,J,4) = AL(2,J,1)
+        AL(2,J,1) = 0.0
+        AL(NX-2,J,4) = AL(NX-2,J,3)
+        AL(NX-2,J,3) = 0.0
+      END DO
+
+      CALL T_STARTF("GAUSS")
+      CALL GAUSS(AL,AK,NX)
+
+      DO J = JBEG1,JEND1  
+        AL(NX-1,J,5) = AK(NX,J)
+      END DO
+      CALL T_STOPF("GAUSS")
         
- !$OMP PARALLEL DO PRIVATE (I,J)
-        do j=jbeg1,jend1  
-	    do i=ibeg1,iend1
-	     dus(i,j)=al(i,j,5)
-	    end do
-        end do
+!$OMP PARALLEL DO PRIVATE (I,J)
+      DO J = JBEG1,JEND1  
+        DO I = IBEG1,IEND1
+          DUS(I,J) = AL(I,J,5)
+        END DO
+      END DO
 
-        call gamil_arrays_comm(COMM_TO_LEFT,1,dus(:,beglatexdyn))
+      CALL GAMIL_ARRAYS_COMM(COMM_TO_LEFT,1,DUS(:,BEGLATEXDYN))
 
- !$OMP PARALLEL DO PRIVATE (I,J)
-        do j=jbeg1,jend1  
-	   do i=ibeg1,iend1
-	     dps0(i,j)=wh(i,j)-ai(i,j)*dus(i+1,j)+bi(i,j)*dus(i,j)
-	     dps0(i,j)=(dps0(i,j)-hhk(i,j))/(dtdy*c0(i,j))-dps1(i,j)
-	   end do
-c
-	   do i=ibeg1,iend1
-	     dus(i,j)=(dus(i,j)-uuk(i,j))/dtdy-duss(i,j)
-	   end do
-        enddo
+!$OMP PARALLEL DO PRIVATE (I,J)
+      DO J = JBEG1,JEND1  
+        DO I = IBEG1,IEND1
+          DPS0(I,J) = WH(I,J)-AI(I,J)*DUS(I+1,J)+BI(I,J)*DUS(I,J)
+          DPS0(I,J) = (DPS0(I,J)-HHK(I,J))/(DTDY*C0(I,J))-DPS1(I,J)
+        END DO
 
-      do j=jbeg0,jend0
-       if(j .eq. 1 .or. j .eq. plat) then
-        do i=ibeg0,iend0
-           dus(i,j)=0.0
-           dps0(i,j)=0.0
-        end do
-       endif
-      end do        
+        DO I = IBEG1,IEND1
+          DUS(I,J) = (DUS(I,J)-UUK(I,J))/DTDY-DUSS(I,J)
+        END DO
+      END DO
 
-      call gamil_arrays_comm(COMM_TO_LEFT,1,dus(:,beglatexdyn),dps0(:,beglatexdyn))
-      call gamil_arrays_comm(COMM_TO_RIGHT,1,dus(:,beglatexdyn),dps0(:,beglatexdyn))
+      DO J = JBEG0,JEND0
+        IF(J .EQ. 1 .OR. J .EQ. PLAT) THEN
+          DO I = IBEG0,IEND0
+            DUS (I,J) = 0.0
+            DPS0(I,J) = 0.0
+          END DO
+        END IF
+      END DO        
 
-      call remove_comm_array(wh(:,jbeg0))
-      call remove_comm_array(bi(:,jbeg0))
-      call remove_comm_array(ai(:,jbeg0))
+      CALL GAMIL_ARRAYS_COMM(COMM_TO_LEFT,  1, DUS(:,BEGLATEXDYN), DPS0(:,BEGLATEXDYN))
+      CALL GAMIL_ARRAYS_COMM(COMM_TO_RIGHT, 1, DUS(:,BEGLATEXDYN), DPS0(:,BEGLATEXDYN))
 
-c
-c       End of semi-implicit quadratic-conservation scheme
-c
-        return
-        end
+      CALL REMOVE_COMM_ARRAY(WH(:,JBEG0))
+      CALL REMOVE_COMM_ARRAY(BI(:,JBEG0))
+      CALL REMOVE_COMM_ARRAY(AI(:,JBEG0))
+
+      RETURN
+      END
