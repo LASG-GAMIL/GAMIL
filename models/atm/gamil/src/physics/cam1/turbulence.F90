@@ -1,9 +1,10 @@
 #include <misc.h>
 #include <params.h>
+
 module turbulence
 !---------------------------------------------------------------------------------
 ! Module to compute mixing coefficients associated with turbulence in the 
-! planetary boundary layer and elsewhere.
+! planetary boundary layer and else where.
 !
 ! calling sequence:
 !
@@ -17,13 +18,6 @@ module turbulence
 !          vd_k_freeatm  computes mixing coefficients for free atmosphere
 !          vd_k_pbl      computes mixing coefficients for pbl
 !
-!---------------------------Code history--------------------------------
-! Standardized:      J. Rosinski, June 1992
-! Reviewed:          P. Rasch, B. Boville, August 1992
-! Reviewed:          P. Rasch, April 1996
-! Reviewed:          B. Boville, April 1996
-! rewritten:         B. Boville, May 2000
-! rewritten:         B. Stevens, August 2000
 !---------------------------------------------------------------------------------
   use shr_kind_mod, only: r8 => shr_kind_r8
   use ppgrid, only    : pver, pverp, pcols
@@ -35,11 +29,11 @@ module turbulence
 !
 ! PBL limits
 !
-  real(r8), parameter :: ustar_min = 0.01        ! min permitted value of ustar
-  real(r8), parameter :: pblmaxp   = 4.e4        ! pbl max depth in pressure units
-  real(r8), parameter :: zkmin     = 0.01        ! Minimum kneutral*f(ri)
+  real(r8), parameter :: ustar_min = 0.01 ! Minimum permitted value of ustar
+  real(r8), parameter :: pblmaxp   = 4.e4 ! PBL max depth in pressure units
+  real(r8), parameter :: zkmin     = 0.01 ! Minimum kneutral*f(ri)
 !
-! PBL Parameters
+! PBL parameters
 !
   real(r8), parameter :: onet  = 1./3. ! 1/3 power in wind gradient expression
   real(r8), parameter :: betam = 15.0  ! Constant in wind gradient expression
@@ -51,6 +45,9 @@ module turbulence
   real(r8), parameter :: sffrac=  0.1  ! Surface layer fraction of boundary layer
   real(r8), parameter :: binm  = betam*sffrac       ! betam * sffrac
   real(r8), parameter :: binh  = betah*sffrac       ! betah * sffrac
+  real(r8), parameter :: ewm   = 1./3.         ! Exponent of wm
+  real(r8), parameter :: ec    = 0.0           ! Entrainment coefficient
+  real(r8), parameter :: eu    = 5.0           ! Coefficient of ustar in entrainment flux
 !
 ! Pbl constants set using values from other parts of code
 !
@@ -67,11 +64,9 @@ module turbulence
   integer, save  :: nbot_turb  ! Bottom level to which turbulent vertical diff is applied.
 
 CONTAINS
-!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!===============================================================================
- subroutine trbinti(gravx,      cpairx, rairx, zvirx, ntop_eddy,  &
-                    nbot_eddy,  hypm,   vkx )
+
+  subroutine trbinti(gravx,      cpairx, rairx, zvirx, ntop_eddy,  &
+                     nbot_eddy,  hypm,   vkx )
 !----------------------------------------------------------------------- 
 ! 
 ! Purpose:  
@@ -131,15 +126,14 @@ CONTAINS
 
     return
  end subroutine trbinti
-!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!===============================================================================
+
  subroutine trbintr(lchnk   ,ncol    ,                            &
                     th      ,t       ,q       ,z       ,zi      , &
                     pmid    ,u       ,v       ,taux    ,tauy    , &
                     shflx   ,cflx    ,obklen  ,ustar   ,pblh    , &
                     kvm     ,kvh     ,cgh     ,cgs     ,kqfs    , &
-                    tpert   ,qpert   ,ktopbl  ,ktopblmn)
+                    tpert   ,qpert   ,we      ,ehf     ,eqf     , &
+                    euf     ,evf     ,ktopbl  ,ktopblmn,cldn)
 !----------------------------------------------------------------------- 
 ! 
 ! Purpose: 
@@ -169,6 +163,7 @@ CONTAINS
     real(r8), intent(in)  :: shflx(pcols)             ! sensible heat flux
     real(r8), intent(in)  :: cflx(pcols,pcnst+pnats)  ! constituent flux
     real(r8), intent(in)  :: pmid(pcols,pver)         ! midpoint pressures
+    real(r8), intent(in)  :: cldn(pcols,pver)         ! cloud fraction
 
    !
    ! Output arguments
@@ -180,6 +175,11 @@ CONTAINS
     real(r8), intent(out) :: cgs(pcols,pverp)         ! counter-gradient star (cg/flux)
     real(r8), intent(out) :: tpert(pcols)             ! convective temperature excess
     real(r8), intent(out) :: qpert(pcols)             ! convective humidity excess
+    real(r8), intent(out) :: we(pcols)                ! entrainment velocity
+    real(r8), intent(out) :: ehf(pcols)               ! entrainment heat flux
+    real(r8), intent(out) :: euf(pcols)               ! entrainment U flux
+    real(r8), intent(out) :: evf(pcols)               ! entrainment V flux
+    real(r8), intent(out) :: eqf(pcols,pcnst+pnats)   ! entrainment constituent flux
     real(r8), intent(out) :: ustar(pcols)             ! surface friction velocity [m/s]
     real(r8), intent(out) :: obklen(pcols)            ! Obukhov length
     real(r8), intent(out) :: pblh(pcols)              ! boundary-layer height [m]
@@ -208,8 +208,8 @@ CONTAINS
    ! Initialize time dependent variables that do depend on pbl height
    !
     call  pblintd(lchnk   ,ncol    ,                            &
-                  th      ,q       ,z       ,u       ,v       , &
-                  ustar   ,obklen  ,kbfs    ,pblh    ,wstar   )
+                  th      ,q       ,z       ,zi      ,u       ,v       , &
+                  ustar   ,obklen  ,kbfs    ,pblh    ,wstar   ,cldn)
    !
    ! Get free atmosphere exchange coefficients
    !
@@ -217,12 +217,13 @@ CONTAINS
    ! 
    ! Get pbl exchange coefficients
    !
-    call austausch_pbl(lchnk   ,ncol    ,                            &
+    call austausch_pbl(lchnk   ,ncol    ,th      ,q       ,u    ,v , &
                        z       ,kvf     ,kqfs    ,khfs    ,kbfs    , &
                        obklen  ,ustar   ,wstar   ,pblh    ,kvm     , &
                        kvh     ,cgh     ,cgs     ,tpert   ,qpert   , &
+                       we      ,ehf     ,eqf     ,euf     ,evf     , &
                        ktopbl  ,ktopblmn)
-   !
+    
     call outfld ('PBLH    ',pblh ,pcols,lchnk)
     call outfld ('TPERT   ',tpert,pcols,lchnk)
     call outfld ('QPERT   ',qpert,pcols,lchnk)
@@ -230,12 +231,17 @@ CONTAINS
     call outfld ('KVH     ',kvh,pcols,lchnk)
     call outfld ('KVM     ',kvm,pcols,lchnk)
     call outfld ('CGS     ',cgs,pcols,lchnk)
-
+    call outfld ('CGH     ',cgh,pcols,lchnk)
+    call outfld ('WE      ',we,pcols,lchnk)
+    call outfld ('EHF     ',ehf,pcols,lchnk)
+    call outfld ('EQF     ',eqf,pcols,lchnk)
+    call outfld ('EUF     ',euf,pcols,lchnk)
+    call outfld ('EVF     ',evf,pcols,lchnk)
+    call outfld ('KHFS    ',khfs,pcols,lchnk)
+    call outfld ('KQFS    ',kqfs,pcols,lchnk)
     return
  end subroutine trbintr
-!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!===============================================================================
+
  subroutine trbintd(lchnk   ,ncol    ,                            &
                     th      ,q       ,z       ,u       ,v       , &
                     t       ,pmid    ,cflx    ,shflx   ,taux    , &
@@ -336,12 +342,10 @@ CONTAINS
 
     return
  end subroutine trbintd
-!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!===============================================================================
+
  subroutine pblintd(lchnk   ,ncol    ,                            &
-                    th      ,q       ,z       ,u       ,v       , &
-                    ustar   ,obklen  ,kbfs    ,pblh    ,wstar   )
+                    th      ,q       ,z       ,zi      ,u       ,v       , &
+                    ustar   ,obklen  ,kbfs    ,pblh    ,wstar   ,cldn)
 !----------------------------------------------------------------------- 
 ! 
 ! Purpose: 
@@ -379,11 +383,13 @@ CONTAINS
     real(r8), intent(in)  :: th(pcols,pver)          ! potential temperature [K]
     real(r8), intent(in)  :: q(pcols,pver,pcnst+pnats)     ! specific humidity [kg/kg]
     real(r8), intent(in)  :: z(pcols,pver)           ! height above surface [m]
-    real(r8), intent(in)  :: u(pcols,pver)           ! windspeed x-direction [m/s]
+    real(r8), intent(in)  :: zi(pcols,pverp)          ! height above surface [m]
+    real(r8), intent(in)  :: u(pcols,pver)            ! zonal velocity
     real(r8), intent(in)  :: v(pcols,pver)           ! windspeed y-direction [m/s]
     real(r8), intent(in)  :: ustar(pcols)            ! surface friction velocity [m/s]
     real(r8), intent(in)  :: obklen(pcols)           ! Obukhov length
     real(r8), intent(in)  :: kbfs(pcols)             ! sfc kinematic buoyancy flux [m^2/s^3]
+    real(r8), intent(in)  :: cldn(pcols,pver)        ! cloud fraction
  
    !
    ! Output arguments
@@ -490,11 +496,13 @@ CONTAINS
        wstar(i) = (max(0._r8,kbfs(i))*g*pblh(i)/thvref(i))**onet
     end do
 
+    do i = 1, ncol
+      if (cldn(i,pver) > 0.0) pblh(i) = max(pblh(i), zi(i,pver) + 50.)
+    end do
+
     return
  end subroutine pblintd
-!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!===============================================================================
+
   subroutine austausch_atm(lchnk   ,ncol    ,ri      ,s2      ,kvf     )
 !----------------------------------------------------------------------- 
 ! 
@@ -559,20 +567,19 @@ CONTAINS
           else 
              fofri = 1.0/(1.0 + 10.0*ri(i,k)*(1.0 + 8.0*ri(i,k)))    
           end if
-          kvn = ml2(k)*sqrt(s2(i,k))
+          kvn = ml2(k)*sqrt(s2(i,k))     ! Notice: the original code is ml2(k), modified by Sun Wenqi in 2012/9/24
           kvf(i,k+1) = max(zkmin,kvn*fofri)
        end do
     end do
 
     return
  end subroutine austausch_atm
-!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!===============================================================================
- subroutine austausch_pbl(lchnk   ,ncol    ,                            &
-                          z       ,kvf     ,kqfs    ,khfs    ,kbfs    , &
+
+ subroutine austausch_pbl(lchnk   ,ncol    ,th      ,q      ,u      ,v  , &
+                          z       ,kvf     ,kqfs    ,khfs   ,kbfs    , &
                           obklen  ,ustar   ,wstar   ,pblh    ,kvm     , &
                           kvh     ,cgh     ,cgs     ,tpert   ,qpert   , &
+                          we      ,ehf     ,eqf     ,euf     ,evf     , &
                           ktopbl  ,ktopblmn)
 !----------------------------------------------------------------------- 
 ! 
@@ -610,6 +617,10 @@ CONTAINS
     integer, intent(in) :: lchnk                    ! chunk identifier
     integer, intent(in) :: ncol                     ! number of atmospheric columns
 
+    real(r8), intent(in) :: th(pcols,pver)          ! potential temperature [K]
+    real(r8), intent(in) :: u(pcols,pver)          ! U Velocity[m/s]
+    real(r8), intent(in) :: v(pcols,pver)          ! V Velocity[m/s]
+    real(r8), intent(in) :: q(pcols,pver,pcnst+pnats)   ! specific humidity [kg/kg]
     real(r8), intent(in) :: z(pcols,pver)           ! height above surface [m]
     real(r8), intent(in) :: kvf(pcols,pverp)        ! free atmospheric eddy diffsvty [m2/s]
     real(r8), intent(in) :: kqfs(pcols,pcnst+pnats) ! kinematic surf cnstituent flux (kg/m2/s)
@@ -628,6 +639,11 @@ CONTAINS
     real(r8), intent(out) :: cgs(pcols,pverp)       ! counter-gradient star (cg/flux)
     real(r8), intent(out) :: tpert(pcols)           ! convective temperature excess
     real(r8), intent(out) :: qpert(pcols)           ! convective humidity excess
+    real(r8), intent(out) :: we(pcols)              ! entrainment velocity
+    real(r8), intent(out) :: ehf(pcols)             ! entrainment heat flux
+    real(r8), intent(out) :: eqf(pcols,pcnst+pnats)    ! entrainment constituent flux
+    real(r8), intent(out) :: euf(pcols)             !entrainment u flux   
+    real(r8), intent(out) :: evf(pcols)             !entrainment v flux
 
     integer, intent(out) :: ktopbl(pcols)           ! index of first midpoint inside pbl
     integer, intent(out) :: ktopblmn                ! min value of ktopbl
@@ -635,11 +651,13 @@ CONTAINS
 !---------------------------Local workspace-----------------------------
 !
     integer  :: i                       ! longitude index
+    integer  :: j                       ! constituent index
     integer  :: k                       ! level index
 
     real(r8) :: phiminv(pcols)          ! inverse phi function for momentum
     real(r8) :: phihinv(pcols)          ! inverse phi function for heat
     real(r8) :: wm(pcols)               ! turbulent velocity scale for momentum
+    real(r8) :: we3(pcols)              ! cubic of a velocity scale for computation of entrainment flux
     real(r8) :: zp(pcols)               ! current level height + one level up 
     real(r8) :: fak1(pcols)             ! k*ustar*pblh     
     real(r8) :: fak2(pcols)             ! k*wm*pblh
@@ -649,14 +667,34 @@ CONTAINS
     real(r8) :: zl(pcols)               ! zmzp / Obukhov length
     real(r8) :: zh(pcols)               ! zmzp / pblh
     real(r8) :: zzh(pcols)              ! (1-(zmzp/pblh))**2
+    real(r8) :: ehvf(pcols)             ! entrainment flux (virtual potential temperature)
     real(r8) :: zmzp                    ! level height halfway between zm and zp
+    real(r8) :: minlev                  ! index of first midpoint in pbl
     real(r8) :: term                    ! intermediate calculation
-
+    real(r8) :: delta_th                ! delta poential temperature across the pbl top
+    real(r8) :: delta_q                 ! delta q across the pbl top
+    real(r8) :: delta_u                 ! delta u across the pbl top
+    real(r8) :: delta_v                 ! delta v across the pbl top
+    real(r8) :: delta_thv
+    real(r8) :: thv1
+    real(r8) :: thv2
     logical  :: unstbl(pcols)           ! pts w/unstbl pbl (positive virtual ht flx)
     logical  :: pblpt(pcols)            ! pts within pbl
 !
-! Initialize height independent arrays
-!
+! Initialize height independent variables  
+!   
+    do i = 1, ncol
+       ehvf(i) = 0.0
+       ehf(i)  = 0.0
+       we3(i)  = 0.0
+       we(i)   = 0.0
+       euf(i)  = 0.0
+       evf(i)  = 0.0
+       do j = 1, pcnst+pnats
+          eqf(i,j) = 0.0
+       end do
+    end do
+
     do i=1,ncol
        unstbl(i) = (kbfs(i) > 0.)
        pblk(i) = 0.0
@@ -667,11 +705,13 @@ CONTAINS
           wm(i)      = ustar(i)*phiminv(i)
           fak2(i)    = wm(i)*pblh(i)*vk
           fak3(i)    = fakn*wstar(i)/wm(i)
-          tpert(i)   = max(khfs(i)*fak/wm(i),0._r8)
-          qpert(i)   = max(kqfs(i,1)*fak/wm(i),0._r8)
+          tpert(i)   = max(khfs(i)  *fak/wm(i), 0._r8)
+          qpert(i)   = max(kqfs(i,1)*fak/wm(i), 0._r8)
+          we3(i)     = wstar(i)**3 + eu*(ustar(i)**3)
+          ehvf(i)    = - ec * we3(i) / pblh(i)
        else
-          tpert(i)   = max(khfs(i)*fak/ustar(i),0._r8)
-          qpert(i)   = max(kqfs(i,1)*fak/ustar(i),0._r8)
+          tpert(i)   = max(khfs(i)  *fak/ustar(i), 0._r8)
+          qpert(i)   = max(kqfs(i,1)*fak/ustar(i), 0._r8)
        end if
     end do
 !
@@ -691,17 +731,17 @@ CONTAINS
 ! and then calculations are directed toward regime: stable vs unstable, surface vs outer 
 ! layer.
 !
-    do k=pver,pver-npbl+2,-1
-       do i=1,ncol
-          pblpt(i) = (z(i,k) < pblh(i))
+    do k = pver, pver-npbl+2, -1
+       do i = 1, ncol
+          pblpt(i) = (z(i,k) <= pblh(i))
           if (pblpt(i)) then
              ktopbl(i) = k
              zp(i)  = z(i,k-1)
              if (zkmin == 0.0 .and. zp(i) > pblh(i)) zp(i) = pblh(i)
              zmzp    = 0.5*(z(i,k) + zp(i))
-             zh(i)   = zmzp/pblh(i)
-             zl(i)   = zmzp/obklen(i)
-             zzh(i)  = zh(i)*max(0._r8,(1. - zh(i)))**2
+             zh(i)   = zmzp / pblh(i)
+             zl(i)   = zmzp / obklen(i)
+             zzh(i)  = zh(i) * max(0._r8, 1. - zh(i))**2
              if (unstbl(i)) then
                 if (zh(i) < sffrac) then
                    term     = (1. - betam*zl(i))**onet
@@ -719,15 +759,15 @@ CONTAINS
                 else
                    pblk(i) = fak1(i)*zzh(i)/(betas + zl(i))
                 end if
-                pr(i)    = 1.
-             end if
-             kvm(i,k) = max(pblk(i),kvf(i,k))
-             kvh(i,k) = max(pblk(i)/pr(i),kvf(i,k))
+                pr(i) = 1.
+             end if 
+             kvm(i,k) = max(pblk(i), kvf(i,k))
+             kvh(i,k) = max(pblk(i)/pr(i), kvf(i,k))
           end if
        end do
     end do
 !
-! Check whether last allowed midpoint is within pbl, determine ktopblmn
+! Determine ktopblmn
 !
     ktopblmn = pver
     k = pver-npbl+1
@@ -735,7 +775,35 @@ CONTAINS
        if (z(i,k) < pblh(i)) ktopbl(i) = k
        ktopblmn = min(ktopblmn, ktopbl(i))
     end do
+!    
+! Determine the entrainment velocity we and the entrainment constituent flux
+!
+    do i = 1, ncol
+      if (unstbl(i)) then
+        minlev        = ktopbl(i)
+        kvm(i,minlev) = 0.
+        kvh(i,minlev) = 0.
+        thv1          = th(i,minlev)   * (1.0 + 0.61*q(i,minlev,1))
+        thv2          = th(i,minlev-1) * (1.0 + 0.61*q(i,minlev-1,1))
+        delta_thv     = thv2 - thv1
+        delta_th      = th(i, minlev-1) - th(i, minlev)
+        we(i)         = ehvf(i) / delta_thv
+        if (abs(we(i)) > we3(i)**(1./3)) then
+          we(i) = - we3(i)**(1./3)
+        end if
+        ehf(i)  = we(i) * delta_th
+        delta_u = u(i, minlev-1) - u(i, minlev)
+        delta_v = v(i, minlev-1) - v(i, minlev)
+        euf(i)  = we(i)*delta_u
+        evf(i)  = we(i)*delta_v
+        do j = 1, pcnst+pnats
+          delta_q  = q(i, minlev-1, j) - q(i, minlev, j)
+          eqf(i,j) = we(i) * delta_q
+        end do
+      end if   
+    end do
 
     return
- end subroutine austausch_pbl
-END MODULE turbulence
+  end subroutine austausch_pbl
+
+end module turbulence

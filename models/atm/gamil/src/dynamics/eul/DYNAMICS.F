@@ -242,6 +242,23 @@
               PLY(I,J,K) = PS(I,J)*SIGL(K) + PMTOP
               WK5 = PLY(I,J,K)/DPALIB
               KPP = INT(WK5)
+              IF (KPP < 1 .OR. KPP > NA) THEN
+                WRITE(6, "('[Error]: DYNAMICS: KPP ', I, ' is out of range!')") KPP
+                WRITE(6, "('[Error]: DYNAMICS: I = ', I, ' J = ', I, ' K = ', I)") I, J, K
+                WRITE(6, "('[Error]: DYNAMICS: Profile of U:')")
+                WRITE(6, *) US(I,J,:)
+                WRITE(6, "('[Error]: DYNAMICS: Profile of V:')")
+                WRITE(6, *) VS(I,J,:)
+                WRITE(6, "('[Error]: DYNAMICS: Profile of T:')")
+                WRITE(6, *) TS(I,J,:)
+                WRITE(6, "('[Error]: DYNAMICS: Profile of SU:')")
+                WRITE(6, *) SU(I,J,:)
+                WRITE(6, "('[Error]: DYNAMICS: Profile of SV:')")
+                WRITE(6, *) SV(I,J,:)
+                WRITE(6, "('[Error]: DYNAMICS: Profile of ST:')")
+                WRITE(6, *) ST(I,J,:)
+                CALL ENDRUN
+              END IF
               WK6 = WK5-DFLOAT(KPP)
               CB (I,J,K) = (1.D0-WK6)*CBB (KPP)+WK6*CBB (KPP+1)
               DCB(I,J,K) = (1.D0-WK6)*DCBB(KPP)+WK6*DCBB(KPP+1)

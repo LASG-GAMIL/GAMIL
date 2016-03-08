@@ -4,7 +4,7 @@
 subroutine tphysac (ztodt,   pblh,    qpert,   tpert,  shf,  &
                     taux,    tauy,    cflx,    sgh,    lhf,  &
                     landfrac,snowh,   tref,    precc,  precl,  &
-                    tin,     state,   tend,    ocnfrac )
+                    tin,     state,   tend,    ocnfrac, cldn)
 !----------------------------------------------------------------------- 
 ! 
 ! Purpose: 
@@ -42,9 +42,12 @@ subroutine tphysac (ztodt,   pblh,    qpert,   tpert,  shf,  &
    real(r8), intent(in) :: landfrac(pcols)        ! Land fraction
    real(r8), intent(in) :: ocnfrac(pcols)         ! Land fraction
    real(r8), intent(in) :: snowh(pcols)           ! snow depth (liquid water equivalent)
+
    real(r8), intent(in) :: tref(pcols)            ! 2m air temperature
    real(r8), intent(in) :: precc(pcols)           ! convective precipitation
    real(r8), intent(in) :: precl(pcols)           ! large-scale precipitation
+   real(r8), intent(in) :: cldn(pcols,pver)       ! cloud fraction [fraction]
+   
    real(r8), intent(out) :: pblh(pcols)           ! Planetary boundary layer height
    real(r8), intent(out) :: qpert(pcols,ppcnst)   ! Moisture/constit. perturbation (PBL)
    real(r8), intent(out) :: tpert(pcols)          ! Temperature perturbation (PBL)
@@ -61,25 +64,27 @@ subroutine tphysac (ztodt,   pblh,    qpert,   tpert,  shf,  &
 !
 !---------------------------Local workspace-----------------------------
 !
-   type(physics_ptend) :: ptend                  ! indivdual parameterization tendencies
+   type(physics_ptend) ptend                ! indivdual parameterization tendencies
 
-   integer :: lchnk                                ! chunk identifier
-   integer :: ncol                                 ! number of atmospheric columns
-   integer i                 ! Longitude, level indices
-   integer :: yr, mon, day, tod       ! components of a date
+   integer lchnk                            ! chunk identifier
+   integer ncol                             ! number of atmospheric columns
+   integer i
 
-   logical :: labort                            ! abort flag
+   logical labort                           ! abort flag
 
    real(r8) tvm(pcols,pver)           ! virtual temperature
    real(r8) prect(pcols)              ! total precipitation
    real(r8) surfric(pcols)              ! surface friction velocity
    real(r8) obklen(pcols)             ! Obukhov length
 
-!! (wanhui 2003.06.11)
-
-   real(r8) dudtm,dvdtm,dtdtm
-   integer  iic,kk
-!!
+   real(r8) we(pcols)                ! entrainment velocity
+   real(r8) ehf(pcols)               ! entrainment heat flux
+   real(r8) esf(pcols)               ! entrainment dse flux
+   real(r8) euf(pcols)               ! entrainment U flux
+   real(r8) evf(pcols)               ! entrainment V flux
+   real(r8) eqf(pcols,ppcnst)        ! entrainment constituent flux
+   real(r8) khfs_tot(pcols,pver+1)           
+   real(r8) kqfs_tot(pcols,pver+1)          
 !
 !-----------------------------------------------------------------------
    lchnk = state%lchnk
@@ -135,72 +140,18 @@ subroutine tphysac (ztodt,   pblh,    qpert,   tpert,  shf,  &
 !===================================================
 
    call vd_intr (ztodt    ,state    ,taux     ,tauy     , shf    ,&
-                 cflx     ,pblh     ,tpert    ,qpert    , surfric  ,&
-                 obklen   ,ptend    )
+                 cflx     ,pblh     ,tpert    ,qpert    , we     ,&
+                 ehf      ,eqf      ,euf      ,evf      , esf    ,surfric ,&
+                 obklen   ,ptend    ,khfs_tot ,kqfs_tot ,cldn)
 
    call physics_update (state, tend, ptend, ztodt)
-
-!!------------------------------------------------------------------------
-!!(wanhui 2003.06.11)
-!
-!      do kk=1,pver
-!       do iic=1,pcols
-!
-!          dudtm = tend%dudt(iic,kk)
-!          dvdtm = tend%dvdt(iic,kk)
-!          dtdtm = tend%dtdt(iic,kk)
-!
-!          if ( abs(dudtm) > 1.0d-3 ) then
-!             write(161,55) 'chunk',lchnk,'col',iic,'lev',kk,':dudt=',dudtm
-!          endif
-!
-!          if ( abs(dvdtm) > 1.0d-3 ) then
-!             write(162,55) 'chunk',lchnk,'col',iic,'lev',kk,':dvdt=',dvdtm
-!          endif
-!
-!          if ( abs(dtdtm) > 1.0d-3 ) then
-!             write(163,55) 'chunk',lchnk,'col',iic,'lev',kk,':dtdt=',dtdtm
-!          endif
-!
-!       enddo
-!      enddo
-!
-!55    format(1x,a6,i4,a4,i3,a5,i3,a8,e25.18)
-
 
 !===================================================
 ! Gravity wave drag
 !===================================================
 
-   call gw_intr (state   ,sgh     ,pblh    ,ztodt   , ptend )
-   call physics_update (state, tend, ptend, ztodt)
-
-!!------------------------------------------------------------------------
-!!(wanhui 2003.06.11)
-!
-!      do kk=1,pver
-!       do iic=1,pcols
-!
-!          dudtm = tend%dudt(iic,kk)
-!          dvdtm = tend%dvdt(iic,kk)
-!          dtdtm = tend%dtdt(iic,kk)
-!
-!          if ( abs(dudtm) > 1.0d-3 ) then
-!              write(171,55) 'chunk',lchnk,'col',iic,'lev',kk,':dudt=',dudtm
-!          endif
-!
-!          if ( abs(dvdtm) > 1.0d-3 ) then
-!             write(172,55) 'chunk',lchnk,'col',iic,'lev',kk,':dvdt=',dvdtm
-!          endif
-!
-!          if ( abs(dtdtm) > 1.0d-3 ) then
-!             write(173,55) 'chunk',lchnk,'col',iic,'lev',kk,':dtdt=',dtdtm
-!          endif
-!
-!       enddo
-!      enddo
-!
-
+   call gw_intr(state, sgh, pblh, ztodt, ptend)
+   call physics_update(state, tend, ptend, ztodt)
 
 !*** BAB's FV kludge
 
@@ -208,14 +159,14 @@ subroutine tphysac (ztodt,   pblh,    qpert,   tpert,  shf,  &
 
    if (aqua_planet) then
       labort = .false.
-      do i=1,ncol
+      do i = 1, ncol
          if (ocnfrac(i) /= 1.) labort = .true.
       end do
       if (labort) then
          write(6,*) 'ERROR:  grid contains non-ocean point'
          call endrun ()
-      endif
-   endif
+      end if
+   end if
 !
 ! Convert mass fractions of non-water tracers back to mixing ratios.
 ! (Overwrite non-water portions of q).

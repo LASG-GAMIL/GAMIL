@@ -19,6 +19,7 @@ module vertical_diffusion
     !      vdiff            performs vert diff and pbl
     !        trbintr        compute turbulent diffusivities and boundary layer cg terms
     !        vd_add_cg      add boudary layer cg term to profiles
+    !        vd_add_ent     add boundary layer entrainment term to profiles
     !        vd_lu_decomp   perform lu decomposition of vertical diffusion matrices
     !        vd_lu_qmolec   update decomposition for molecular diffusivity of a constituent
     !        vd_lu_solve    solve the euler backward problem for vertical diffusion 
@@ -79,7 +80,7 @@ module vertical_diffusion
 
     character(len=8), private :: vdiffnam(pcnst+pnats) ! names of v-diff tendencies
 
-    contains
+contains
 
     subroutine vd_register
         !-----------------------------------------------------------------------
@@ -153,7 +154,6 @@ module vertical_diffusion
 
         ! Initialize turbulence variables
         call trbinti(gravit, cpair, rair, zvir, ntop_eddy, nbot_eddy,   hypm, vkx)
-
         ! Set names of diffused variable tendencies and declare them as history variables
         do k = 1, pcnst+pnats
             vdiffnam(k) = 'VD'//cnst_name(k)
@@ -161,44 +161,44 @@ module vertical_diffusion
             call addfld (vdiffnam(k),'kg/kg/s ',pver, 'A','Vertical diffusion of '//cnst_name(k),phys_decomp)
         end do
 
-        ! Only tracer 1 (Q) is output by default
-
-        !! (wanhui 2003.06.19)
-        !
-        !    call add_default (vdiffnam(1), 1, ' ')
-        !
-        !! (2003.06.19)
-
         return
     end subroutine vd_inti
 
-    !===============================================================================
-    subroutine vd_intr(                                     &
+    subroutine vd_intr(                                    &
         ztodt    ,state    ,                               &
         taux     ,tauy     ,shflx    ,cflx     ,pblh     , &
-        tpert    ,qpert    ,ustar    ,obklen   ,ptend    ) 
+        tpert    ,qpert    ,we       ,ehf      ,eqf      , &
+        euf      ,evf      ,esf      ,ustar    ,obklen   ,ptend    , &
+        khfs_tot ,kqfs_tot ,cldn) 
         !-----------------------------------------------------------------------
         ! interface routine for vertical diffusion and pbl scheme
         !-----------------------------------------------------------------------
         use physics_types,  only: physics_state, physics_ptend
         use history,        only: outfld
-	use phys_buffer,    only: pbuf
-!!$    use geopotential, only: geopotential_dse
+        use phys_buffer,    only: pbuf
         !------------------------------Arguments--------------------------------
         real(r8), intent(in) :: taux(pcols)            ! x surface stress (N/m2)
         real(r8), intent(in) :: tauy(pcols)            ! y surface stress (N/m2)
         real(r8), intent(in) :: shflx(pcols)           ! surface sensible heat flux (w/m2)
         real(r8), intent(in) :: cflx(pcols,pcnst+pnats)! surface constituent flux (kg/m2/s)
         real(r8), intent(in) :: ztodt                  ! 2 delta-t
-
+        real(r8), intent(in) :: cldn(pcols,pver)       ! cloud fraction [fraction]
         type(physics_state), intent(in)  :: state      ! Physics state variables
         type(physics_ptend), intent(inout)  :: ptend   ! indivdual parameterization tendencies
 
         real(r8), intent(out) :: pblh(pcols)           ! planetary boundary layer height
         real(r8), intent(out) :: tpert(pcols)          ! convective temperature excess
         real(r8), intent(out) :: qpert(pcols,pcnst+pnats) ! convective humidity and constituent excess
+        real(r8), intent(out) :: we(pcols)                ! entrainment velocity
+        real(r8), intent(out) :: ehf(pcols)               ! entrainment heat flux
+        real(r8), intent(out) :: esf(pcols)               ! entrainment dse flux
+        real(r8), intent(out) :: euf(pcols)               ! entrainment U flux
+        real(r8), intent(out) :: evf(pcols)               ! entrainment V flux
+        real(r8), intent(out) :: eqf(pcols,pcnst+pnats)   ! entrainment constituent flux
         real(r8), intent(out) :: ustar(pcols)          ! surface friction velocity
         real(r8), intent(out) :: obklen(pcols)         ! Obukhov length
+        real(r8), intent(out) :: khfs_tot(pcols,pverp)
+        real(r8), intent(out) :: kqfs_tot(pcols,pverp)
         !
         !---------------------------Local storage-------------------------------
         integer :: lchnk                               ! chunk identifier
@@ -210,7 +210,17 @@ module vertical_diffusion
         real(r8) :: kvm(pcols,pverp)                   ! diffusion coefficient for momentum
         real(r8) :: cgs(pcols,pverp)                   ! counter-gradient star (cg/flux)
         real(r8) :: rztodt                             ! 1./ztodt
-
+        
+        real(r8) :: rhoi(pcols,pverp)
+        real(r8) :: khfs_1(pcols)
+        real(r8) :: kqfs_1(pcols)
+        
+        real(r8) :: coun_h(pcols,pverp)
+        real(r8) :: coun_q(pcols,pverp)
+        real(r8) :: entr_h(pcols,pverp)
+        real(r8) :: entr_q(pcols,pverp)
+        real(r8) :: entr_u(pcols,pverp)
+        real(r8) :: entr_v(pcols,pverp)
         !-----------------------------------------------------------------------
         ! local constants
         rztodt = 1./ztodt
@@ -235,21 +245,23 @@ module vertical_diffusion
         ptend%lv    = .TRUE.
 
         ! Call the real vertical diffusion code.
-        call vdiff(                                                            &
+        call vdiff(                                                           &
             lchnk       ,ncol        ,                                        &
             ptend%u     ,ptend%v     ,state%t     ,ptend%q     ,ptend%s     , &
             state%pmid  ,state%pint  ,state%lnpint,state%lnpmid,state%pdel  , &
             state%rpdel ,state%zm    ,state%zi    ,ztodt       ,taux        , &
             tauy        ,shflx       ,cflx        ,pblh        ,ustar       , &
-            kvh         ,kvm         ,tpert       ,qpert(1,1)  ,cgs         , &
-            obklen      ,state%exner ,dtk         )
+            kvh         ,kvm         ,tpert       ,qpert(1,1)  ,we          , &
+            ehf         ,eqf         ,euf         ,evf         ,esf ,cgs         , &
+            obklen      ,state%exner , &
+            dtk         ,coun_h,coun_q,entr_h,entr_q,entr_u,entr_v,cldn)
 
         ! Convert the new profiles into vertical diffusion tendencies.
         ! Convert KE dissipative heat change into "temperature" tendency.
         
-	if (RK_or_MG=='MG') then
-            pbuf(kvh_idx)%fld_ptr(1,1:ncol,1:pverp,lchnk,1)=kvh(:ncol,:pverp)  !!sxj
-        endif
+        if (RK_or_MG == 'MG') then
+            pbuf(kvh_idx)%fld_ptr(1,1:ncol,1:pverp,lchnk,1) = kvh(:ncol,:pverp)
+        end if
 
         do k = 1, pver
             do i = 1, ncol
@@ -268,14 +280,42 @@ module vertical_diffusion
         ptend%lq(ixcldw) = .FALSE.
         ptend%q(:ncol,:,ixcldw) = 0.
 #endif
+        do k = 2, pver
+           do i = 1, ncol
+              rhoi(i,k) = state%pint(i,k) * 2. / (rair*(state%t(i,k) + state%t(i,k-1)))
+           end do
+        end do
+        do i = 1, ncol
+           rhoi(i,pverp) = state%pmid(i,pver) / (rair*state%t(i,pver))
+        end do
 
+        do i = 1, ncol
+           khfs_1(i) = shflx(i)/(rhoi(i,pverp)*cpair)
+           kqfs_1(i) = cflx(i,1)/rhoi(i,pverp)
+        end do
+        
+        khfs_tot = 0.
+        kqfs_tot = 0.
+        do i = 1, ncol
+           khfs_tot(i,pverp) = khfs_1(i)
+           kqfs_tot(i,pverp) = kqfs_1(i)
+        end do   
+        do k = 2, pver
+           do i = 1,ncol
+              khfs_tot(i,k) = rhoi(i,k+1)*khfs_tot(i,k+1)/rhoi(i,k) - (ptend%s(i,k)/(state%rpdel(i,k)*cpair*gravit*rhoi(i,k)))
+              kqfs_tot(i,k) = rhoi(i,k+1)*kqfs_tot(i,k+1)/rhoi(i,k) - (ptend%q(i,k,1)/(state%rpdel(i,k)*gravit*rhoi(i,k)))
+           end do
+        end do
         ! Save the vertical diffusion variables on the history file
         dtk(:ncol,:) = dtk(:ncol,:)/cpair                ! normalize heating for history
-        call outfld ('DTVKE   ',dtk,pcols,lchnk)
+        call outfld('DTVKE   ', dtk,            pcols, lchnk)
         dtk(:ncol,:) = ptend%s(:ncol,:)/cpair            ! normalize heating for history using dtk
-        call outfld ('DTV     ',dtk    ,pcols,lchnk)
-        call outfld ('DUV     ',ptend%u,pcols,lchnk)
-        call outfld ('DVV     ',ptend%v,pcols,lchnk)
+        call outfld('DTV     ', dtk,            pcols, lchnk)
+        call outfld('DQV     ', ptend%q(:,:,1), pcols, lchnk)
+        call outfld('DUV     ', ptend%u,        pcols, lchnk)
+        call outfld('DVV     ', ptend%v,        pcols, lchnk)
+        call outfld('khfs_tot', khfs_tot,       pcols, lchnk)
+        call outfld('kqfs_tot', kqfs_tot,       pcols, lchnk)
         do m = 1, pcnst+pnats
             call outfld(vdiffnam(m),ptend%q(1,1,m),pcols,lchnk)
         end do
@@ -283,14 +323,15 @@ module vertical_diffusion
         return
     end subroutine vd_intr
 
-    !===============================================================================
-    subroutine vdiff (lchnk      ,ncol       ,                                     &
+    subroutine vdiff (lchnk      ,ncol     ,                         &
         u          ,v          ,t          ,q          ,dse        , &
         pmid       ,pint       ,piln       ,pmln       ,pdel       , &
         rpdel      ,zm         ,zi         ,ztodt      ,taux       , &
         tauy       ,shflx      ,cflx       ,pblh       ,ustar      , &
-        kvh        ,kvm        ,tpert      ,qpert      ,cgs        , &
-        obklen     ,exner      ,dtk        )
+        kvh        ,kvm        ,tpert      ,qpert      ,we         , &
+        ehf        ,eqf        ,euf        ,evf        ,esf   ,cgs        , &
+        obklen     ,exner      , &
+        dtk        ,coun_h,coun_q,entr_h,entr_q,entr_u,entr_v,cldn)
         !-----------------------------------------------------------------------
         ! Driver routine to compute vertical diffusion of momentum, moisture, trace 
         ! constituents and dry static energy. The new temperature is computed from
@@ -300,6 +341,7 @@ module vertical_diffusion
         ! obtained from the turbulence module.
         !-----------------------------------------------------------------------
         use turbulence,   only: trbintr
+        use history,      only: outfld
         use phys_grid   !ljli2009
         use commap,       only: clat
         !------------------------------Arguments--------------------------------
@@ -319,6 +361,7 @@ module vertical_diffusion
         real(r8), intent(in) :: tauy(pcols)            ! y surface stress (N/m2)
         real(r8), intent(in) :: shflx(pcols)           ! surface sensible heat flux (W/m2)
         real(r8), intent(in) :: cflx(pcols,pcnst+pnats)! surface constituent flux (kg/m2/s)
+        real(r8), intent(in) :: cldn(pcols,pver)       ! cloud fraction [fraction]
 
         real(r8), intent(inout) :: u(pcols,pver)       ! u wind
         real(r8), intent(inout) :: v(pcols,pver)       ! v wind
@@ -333,9 +376,21 @@ module vertical_diffusion
         real(r8), intent(out) :: kvm(pcols,pverp)      ! viscosity (diffusivity for momentum)
         real(r8), intent(out) :: tpert(pcols)          ! convective temperature excess
         real(r8), intent(out) :: qpert(pcols)          ! convective humidity excess
+        real(r8), intent(out) :: we(pcols)             ! entrainment velocity
+        real(r8), intent(out) :: ehf(pcols)            ! entrainment heat flux
+        real(r8), intent(out) :: esf(pcols)            ! entrainment dse flux
+        real(r8), intent(out) :: euf(pcols)            ! entrainment U flux
+        real(r8), intent(out) :: evf(pcols)            ! entrainment V flux
+        real(r8), intent(out) :: eqf(pcols,pcnst+pnats)! entrainment constituent flux
         real(r8), intent(out) :: cgs(pcols,pverp)      ! counter-grad star (cg/flux)
         real(r8), intent(out) :: obklen(pcols)         ! Obukhov length
         real(r8), intent(out) :: dtk(pcols,pver)       ! T tendency from KE dissipation
+        real(r8), intent(out) :: coun_h(pcols,pverp)
+        real(r8), intent(out) :: coun_q(pcols,pverp)
+        real(r8), intent(out) :: entr_h(pcols,pverp)
+        real(r8), intent(out) :: entr_q(pcols,pverp)
+        real(r8), intent(out) :: entr_u(pcols,pverp)
+        real(r8), intent(out) :: entr_v(pcols,pverp)
         !
         !---------------------------Local workspace-----------------------------
         real(r8) :: tmpm(pcols,pver)                   ! potential temperature, ze term in tri-diag sol'n
@@ -363,8 +418,6 @@ module vertical_diffusion
         integer :: ktopbl(pcols)                       ! index of first midpoint inside pbl
         integer :: ktopblmn                            ! min value of ktopbl
 
-        !-----------------------------------------------------------------------
-
         ! Compute the vertical differences of the input u,v for KE dissipation, interface k-
         ! Note, velocity=0 at surface, so then difference at the bottom interface is -u,v(pver)
         do i = 1, ncol
@@ -384,12 +437,13 @@ module vertical_diffusion
         tmpm(:ncol,:pver) = t(:ncol,:pver) * exner(:ncol,:pver)
 
         ! Get diffusivities and c-g terms from turbulence module
-        call trbintr(lchnk   ,ncol    ,                            &
-            tmpm    ,t       ,q        ,zm     ,zi      , &
+        call trbintr(lchnk   ,ncol    ,                   &
+            tmpm    ,t       ,q       ,zm      ,zi      , &
             pmid    ,u       ,v       ,taux    ,tauy    , &
             shflx   ,cflx    ,obklen  ,ustar   ,pblh    , &
             kvm     ,kvh     ,tmpi1   ,cgs     ,kqfs    , &
-            tpert   ,qpert   ,ktopbl  ,ktopblmn)
+            tpert   ,qpert   ,we      ,ehf     ,eqf     , &
+            euf     ,evf     ,ktopbl  ,ktopblmn,cldn)
 
         ! Compute rho at interfaces p/RT,  Ti = (Tm_k + Tm_k-1)/2,  interface k-
         do k = 2, pver
@@ -419,30 +473,32 @@ module vertical_diffusion
             end do
         end do
         !ljli2009
-        call get_lat_all_p(lchnk,ncol,lats)
-        do k=1,pver
+         call get_lat_all_p(lchnk,ncol,lats)
+         do k=1,pver
             do i=1,ncol
                 latitude = clat(lats(i))
                 kvm(i,k) = max(5.0*cos(latitude),kvm(i,k))
                 kvh(i,k) = max(1.0*cos(latitude),kvh(i,k))
             end do
-        end do
-
+         end do
         !ljli2009
-
-        ! Call gravity wave drag to get gw tendency and diffusivities
-        ! ************ ADD GW CALL HERE *****************************
-
-        ! Add gw momentum forcing and KE dissipation
-        ! ************ ADD CODE HERE ********************************
 
         ! Add the nonlocal transport terms to dry static energy, specific humidity and 
         ! other constituents in the boundary layer.
 
         call vd_add_cg(                                                   &
             lchnk      ,ncol       ,                                     &
-            ktopblmn   ,q          ,dse        ,tmpi2      ,kvh        , &
-            tmpi1      ,cgs        ,kqfs       ,rpdel      ,ztodt      )
+            ktopblmn   ,q   ,dse        ,tmpi2      ,kvh        , &
+            tmpi1      ,cgs       ,kqfs       ,rpdel      ,ztodt,coun_h,coun_q )
+        
+        ! Add the entrainment flux terms to dry static energy, specific humidity and other
+        ! constituents in the boundary layer.
+
+        call vd_add_ent(                                                 &
+            lchnk     ,ncol         ,we         ,ktopbl                , &
+            zm        ,ktopblmn     ,q          ,dse       ,u  ,v      , &
+            tmpi2     ,ehf          ,eqf        , &
+            euf       ,evf        ,pblh       ,rpdel       ,ztodt,esf,entr_h,entr_q,entr_u,entr_v )
 
         ! Add the (explicit) surface fluxes to the lowest layer
 
@@ -529,15 +585,20 @@ module vertical_diffusion
                 lchnk   ,ncol     ,                                       &
                 q(1,1,m),ca       ,tmpm     ,dnom     ,ntop    ,nbot     )
         end do
-
+        call outfld ('coun_h',coun_h,pcols,lchnk)
+        call outfld ('coun_q',coun_q,pcols,lchnk)
+        call outfld ('entr_h',entr_h,pcols,lchnk)
+        call outfld ('entr_q',entr_q,pcols,lchnk)
+        call outfld ('entr_u',entr_u,pcols,lchnk)
+        call outfld ('entr_v',entr_v,pcols,lchnk)
+        call outfld ('ESF   ',esf/cpair,pcols,lchnk)
         return
     end subroutine vdiff
 
-    !==============================================================================
     subroutine vd_add_cg (                                &
         lchnk    ,ncol     ,                             &
         ktopblmn ,q        ,dse      ,rhoi    ,kvh     , &
-        cgh      ,cgs      ,kqfs     ,rpdel   ,ztodt   )
+        cgh      ,cgs      ,kqfs     ,rpdel   ,ztodt,coun_h,coun_q   )
         !-----------------------------------------------------------------------
         ! Add the "counter-gradient" term to the dry static energy and tracer fields
         ! in the boundary layer.
@@ -549,6 +610,7 @@ module vertical_diffusion
         ! pbl and eddy vertical diffusion code.
         !------------------------------Arguments--------------------------------
 
+        
         integer, intent(in) :: lchnk                   ! chunk identifier
         integer, intent(in) :: ncol                    ! number of atmospheric columns
         integer, intent(in) :: ktopblmn                ! min value of ktopbl (highest bl top)
@@ -564,10 +626,11 @@ module vertical_diffusion
         real(r8), intent(inout) :: q(pcols,pver,pcnst+pnats)  ! moisture and trace constituent input
         real(r8), intent(inout) :: dse(pcols,pver)     ! dry static energy
 
+        real(r8),intent(out) :: coun_h(pcols,pverp)
+        real(r8),intent(out) :: coun_q(pcols,pverp)
         !---------------------------Local workspace-----------------------------
 
         real(r8) :: qtm(pcols,pver)                    ! temporary trace constituent input
-
         logical lqtst(pcols)                            ! adjust vertical profiles
         integer i                                      ! longitude index
         integer k                                      ! vertical index
@@ -605,10 +668,185 @@ module vertical_diffusion
                 q(:ncol,k,m) = merge (q(:ncol,k,m), qtm(:ncol,k), lqtst(:ncol))
             end do
         end do
-
+        do k = 1, pverp
+           do i = 1,ncol
+              coun_h(i,k) = kvh(i,k)*cgh(i,k)/cpair
+              coun_q(i,k) = kvh(i,k)*cgs(i,k)*kqfs(i,1)
+           end do
+        end do
         return
     end subroutine vd_add_cg
 
+    subroutine vd_add_ent(                                               &
+            lchnk     ,ncol         ,we         ,ktopbl                , &
+            z         ,ktopblmn     ,q          ,dse       ,u    ,v    , &
+            rhoi      ,ehf          ,eqf      , &
+            euf       ,evf        ,pblh       ,rpdel       ,ztodt, esf, entr_h,entr_q,entr_u,entr_v )
+        !-----------------------------------------------------------------------
+        ! Add the "Entrainment Flux" term to the dry static energy and tracer fields
+        ! in the boundary layer.
+        ! Note, ktopbl gives the vertical index of the first midpoint
+        ! within the boundary layer.
+        !------------------------------Arguments--------------------------------
+        use history, only: outfld 
+        
+        integer, intent(in) :: lchnk                   ! chunk identifier
+        integer, intent(in) :: ncol                    ! number of atmospheric columns
+        real(r8),intent(in) :: we(pcols)
+        integer, intent(in) :: ktopbl(pcols)           ! index of first midpoint inside pbl
+        integer, intent(in) :: ktopblmn           ! the highest midpoint in bl 
+
+        real(r8), intent(in) :: z(pcols,pver)          !  mid-point geoptl height above sfc
+        real(r8), intent(in) :: rhoi(pcols,pverp)      ! density (p/RT) at interfaces
+        real(r8), intent(in) :: ehf(pcols)             ! entrainment term for heat [J/kg/m]
+        real(r8), intent(in) :: euf(pcols)             ! entrainment term for U
+        real(r8), intent(in) :: evf(pcols)             ! entrainment term for V
+        real(r8), intent(in) :: eqf(pcols,pcnst+pnats) ! entrainment term for constituents
+        real(r8), intent(in) :: pblh(pcols)            ! PBL height
+        real(r8), intent(in) :: rpdel(pcols,pver)      ! 1./pdel  (thickness bet interfaces)
+        real(r8), intent(in) :: ztodt                  ! 2 delta-t
+
+        real(r8), intent(inout) :: q(pcols,pver,pcnst+pnats)  ! moisture and trace constituent input
+        real(r8), intent(inout) :: dse(pcols,pver)     ! dry static energy
+        real(r8), intent(inout) :: u(pcols,pver)     ! Velocity U
+        real(r8), intent(inout) :: v(pcols,pver)     ! Velocity V
+
+        real(r8), intent(out) :: esf(pcols)          ! entrainment term for dse[J/kg/m]
+        real(r8),intent(out) :: entr_h(pcols,pverp)
+        real(r8),intent(out) :: entr_q(pcols,pverp)
+        real(r8),intent(out) :: entr_u(pcols,pverp)
+        real(r8),intent(out) :: entr_v(pcols,pverp)
+        !---------------------------Local workspace-----------------------------
+
+        real(r8) :: qtm(pcols,pver)                    ! temporary trace constituent input
+        real(r8) :: ehfz(pcols,pverp)
+        real(r8) :: eufz(pcols,pverp)
+        real(r8) :: evfz(pcols,pverp)
+        real(r8) :: eqfz(pcols,pverp,pcnst+pnats)
+        real(r8) :: dtent(pcols,pver)                    ! Temperature tendency for entrainment
+        real(r8) :: duent(pcols,pver)                    ! U tendency for entrainment
+        real(r8) :: dvent(pcols,pver)                    ! V tendency for entrainment
+        real(r8) :: dqent(pcols,pver,pcnst+pnats)        ! moisture tendency for entrainment
+        real(r8) :: dqent1(pcols,pver,pcnst+pnats)       ! moisture tendency for entrainment(after adjustment)
+        real(r8) :: zp(pcols)
+
+        logical lqtst(pcols)                            ! adjust vertical profiles(across pbl)
+        real(r8) zmzp
+        real(r8) minlevel
+        real(r8) delta_s
+        integer i                                      ! longitude index
+        integer k                                      ! vertical index
+        integer m                                      ! constituent index
+        
+        !-----------------------------------------------------------------------
+        do i = 1, ncol
+           minlevel = ktopbl(i)
+           delta_s = dse(i, minlevel-1) - dse(i, minlevel)
+           esf(i) = we(i)*delta_s
+        end do
+        
+        do i = 1, ncol
+           do k = 1, pverp
+              ehfz(i,k) = 0.0
+              eufz(i,k) = 0.0
+              evfz(i,k) = 0.0
+              do m = 1, pcnst+pnats
+                 eqfz(i,k,m) = 0.0
+              end do
+           end do
+        end do
+        
+        do i = 1, ncol
+           do k = ktopblmn, pver
+              if(z(i,k)<=pblh(i)) then
+                 zp(i) = z(i, k-1)
+                 if(zp(i) > pblh(i)) zp(i) = pblh(i)
+                 zmzp = (z(i,k)+zp(i))/2
+                 ehfz(i,k) = esf(i)*(zmzp/pblh(i))**3
+                 eufz(i,k) = euf(i)*(zmzp/pblh(i))**3
+                 evfz(i,k) = evf(i)*(zmzp/pblh(i))**3
+                ! do m = 1, pcnst+pnats
+                !    eqfz(i,k,m) = eqf(i,m)*(zmzp/pblh(i))**3
+                ! end do
+              end if
+           end do
+        end do
+        ! Add entrainment heat flux  to input static energy profiles
+        do k = ktopblmn-1, pver
+            do i = 1, ncol
+                dtent(i,k) = rpdel(i,k)*gravit &
+                             *(rhoi(i,k+1)*ehfz(i,k+1)     &
+                               - rhoi(i,k)*ehfz(i,k))/cpair
+                
+                dse(i,k) = dse(i,k)+ztodt*rpdel(i,k)*gravit &
+                    *(rhoi(i,k+1)*ehfz(i,k+1)     &
+                    - rhoi(i,k  )*ehfz(i,k))
+            end do
+        end do
+
+        ! Add entrainment velocity flux  to input velocity profiles
+        do k = ktopblmn-1, pver
+            do i = 1, ncol
+                duent(i,k) = rpdel(i,k)*gravit &
+                             *(rhoi(i,k+1)*eufz(i,k+1)     &
+                               - rhoi(i,k)*eufz(i,k))
+
+                u(i,k) = u(i,k)+ztodt*rpdel(i,k)*gravit &
+                    *(rhoi(i,k+1)*eufz(i,k+1)     &
+                    - rhoi(i,k  )*eufz(i,k))
+            end do
+        end do
+        do k = ktopblmn-1, pver
+            do i = 1, ncol
+                dvent(i,k) = rpdel(i,k)*gravit &
+                             *(rhoi(i,k+1)*evfz(i,k+1)     &
+                               - rhoi(i,k  )*evfz(i,k))
+
+                v(i,k) = v(i,k)+ztodt*rpdel(i,k)*gravit &
+                    *(rhoi(i,k+1)*evfz(i,k+1)     &
+                    - rhoi(i,k  )*evfz(i,k))
+            end do
+        end do
+        
+        ! Add entrainment constituent to input constituent profiles.
+        ! Check for neg q's in each constituent and put the original vertical
+        ! profile back if a neg value is found. 
+
+        do m = 1, pcnst+pnats
+            qtm(:ncol,ktopblmn-1:pver) = q(:ncol,ktopblmn-1:pver,m)
+            do k = ktopblmn-1, pver
+                do i = 1, ncol
+                    dqent(i,k,m) = rpdel(i,k)*gravit*     &
+                                  (rhoi(i,k+1)*eqfz(i,k+1,m)                    &
+                                   - rhoi(i,k)*eqfz(i,k,m))
+
+                    q(i,k,m) = q(i,k,m) + ztodt*rpdel(i,k)*gravit*     &
+                         (rhoi(i,k+1)*eqfz(i,k+1,m)                    &
+                        - rhoi(i,k  )*eqfz(i,k,m))
+                end do
+            end do
+            lqtst(:ncol) = all(q(:ncol,ktopblmn-1:pver,m) >= qmincg(m), 2)
+            do k = ktopblmn-1, pver
+                q(:ncol,k,m) = merge (q(:ncol,k,m), qtm(:ncol,k), lqtst(:ncol))
+            end do
+            dqent1(:,:,m) = (q(:,:,m)-qtm)/ztodt
+        end do
+        call outfld('DTENT     ',dtent    ,pcols,lchnk)
+        call outfld('DUENT     ',duent    ,pcols,lchnk)
+        call outfld('DVENT     ',dvent    ,pcols,lchnk)
+        call outfld('DQENT     ',dqent(:,:,1)    ,pcols,lchnk)
+        call outfld('DQENT1    ',dqent1(:,:,1)   ,pcols,lchnk)
+        do k = 1, pverp
+           do i = 1,ncol
+              entr_h(i,k) = ehfz(i,k)
+              entr_q(i,k) = eqfz(i,k,1)
+              entr_u(i,k) = eufz(i,k)
+              entr_v(i,k) = evfz(i,k)
+           end do
+        end do
+        return
+    end subroutine vd_add_ent
+    
     !==============================================================================
     subroutine vd_lu_decomp(                                          &
         lchnk      ,ncol       ,                                     &

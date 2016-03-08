@@ -299,7 +299,7 @@ contains
     end do
 
 ! Set flags for nonzero tendencies, q not yet affected by gwd
-    ptend%name  = "vertical diffusion"
+    ptend%name  = "gw_drag"
     ptend%lq(:) = .FALSE.
     ptend%ls    = .TRUE.
     ptend%lu    = .TRUE.

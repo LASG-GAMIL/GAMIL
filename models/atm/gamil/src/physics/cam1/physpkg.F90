@@ -304,7 +304,7 @@ subroutine physpkg(phys_state, phys_state0, gw,     ztodt,  &
                      srfflx_state2d(c)%wsx, srfflx_state2d(c)%wsy, srfflx_state2d(c)%cflx, sgh(1,c), &
                      srfflx_state2d(c)%lhf, landfrac(1,c), snowhland(1,c), srfflx_state2d(c)%tref,   &
                      surface_state2d(c)%precc, surface_state2d(c)%precl, tin(1,1,c), phys_state(c),  &
-                     phys_tend(c), ocnfrac(1,c))
+                     phys_tend(c), ocnfrac(1,c), cldn(1,1,c))
         call t_stopf('tphysac')
     end do
     call t_stopf('ac_physics')
