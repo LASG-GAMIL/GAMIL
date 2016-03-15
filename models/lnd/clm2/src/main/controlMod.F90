@@ -538,7 +538,7 @@ CONTAINS
 
     if (rpntpath == 'not_specified') then
        call getenv ('HOME', homedir)
-       rpntpath = trim(homedir)//'/lnd.'//trim(caseid)//'.rpointer'
+       rpntpath = 'lnd.'//trim(caseid)//'.rpointer'
     endif
 
     do i = 1, nhist
