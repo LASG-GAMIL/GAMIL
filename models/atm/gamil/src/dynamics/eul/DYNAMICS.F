@@ -203,7 +203,7 @@
             TTK(I,J,K) = TT(I,J,K)
           END DO
         END DO
-        DO I = BEGLONEX,ENDLONEX
+        DO I = BEGLONEX, ENDLONEX
           HHK(I,J) = C0(I,J)*(PS(I,J)+PMTOP-PSB(I,J))
           UUK(I,J) = 0.0D0
           DO K = 1,NL

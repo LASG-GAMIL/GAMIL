@@ -1,43 +1,41 @@
-c
-        subroutine gauss(a,b,nx)
-      use pmgrid, only: plat
+
+      SUBROUTINE GAUSS(A, B, NX)
+
       use mpi_gamil
 
-c
-        implicit none
-        integer nx,i,j,k
-        real*8 a(nx,jbeg0:jend0,5),b(nx,jbeg0:jend0),y
-        real*8 send_array(jbeg0:jend0,8), recv_array(jbeg0:jend0,8)
-c
+      IMPLICIT NONE
+      INTEGER NX, I, J, K
+      REAL*8 A(NX,JBEG0:JEND0,5), B(NX,JBEG0:JEND0), Y
+      REAL*8 SEND_ARRAY(JBEG0:JEND0,8), RECV_ARRAY(JBEG0:JEND0,8)
 
-      if (iend0 .eq. nx) then
-        do j=jbeg1,jend1
-          send_array(j,1) = b(nx-3,j)
-          send_array(j,2) = b(nx-1,j)
-          send_array(j,3) = b(nx,j)
-        end do
-        call gamil_array_send_right(send_array,recv_array,(jend0-jbeg0+1)*3)
-      end if
+      IF (IEND0 .EQ. NX) THEN
+        DO J = JBEG1, JEND1
+          SEND_ARRAY(J,1) = B(NX-3,J)
+          SEND_ARRAY(J,2) = B(NX-1,J)
+          SEND_ARRAY(J,3) = B(NX,J)
+        END DO
+        CALL GAMIL_ARRAY_SEND_RIGHT(SEND_ARRAY, RECV_ARRAY, (JEND0-JBEG0+1)*3)
+      END IF
       
-      if (ibeg0 .eq. 1) then
-        call gamil_array_recv_left(send_array,recv_array,(jend0-jbeg0+1)*3)
-        do j=jbeg1,jend1
-          b(nx-3,j) = recv_array(j,1)
-          b(nx-1,j) = recv_array(j,2)
-          b(nx,j) = recv_array(j,3)
-        end do
-      end if
+      IF (IBEG0 .EQ. 1) THEN
+        CALL GAMIL_ARRAY_RECV_LEFT(SEND_ARRAY, RECV_ARRAY, (JEND0-JBEG0+1)*3)
+        DO J = JBEG1, JEND1
+          B(NX-3,J) = RECV_ARRAY(J,1)
+          B(NX-1,J) = RECV_ARRAY(J,2)
+          B(NX,J) = RECV_ARRAY(J,3)
+        END DO
+      END IF
 
-      do j=jbeg1,jend1
-        b(2,j)=b(nx-3,j)
-        b(nx-3,j)=0.0
-      end do
+      DO J = JBEG1, JEND1
+        B(2,   J) = B(NX-3,J)
+        B(NX-3,J) = 0.0
+      END DO
 
-      if (ibeg0 .ne. 1) then
-        call gamil_array_recv_left(send_array,recv_array,(jend0-jbeg0+1)*8)
-        do j=jbeg1,jend1
-          do i = 1,5
-            a(ibeg2-1,j,i) = recv_array(j,i)
+      IF (IBEG0 .NE. 1) THEN
+        CALL GAMIL_ARRAY_RECV_LEFT(SEND_ARRAY,RECV_ARRAY,(JEND0-JBEG0+1)*8)
+        DO J = JBEG1, JEND1
+          DO I = 1, 5
+            A(IBEG2-1,J,I) = recv_array(j,i)
           end do
           b(ibeg2-1,j) = recv_array(j,6)
           b(nx-1,j) = recv_array(j,7)
@@ -112,6 +110,6 @@ c
         end do
         call gamil_array_send_left(send_array,recv_array,(jend0-jbeg0+1)*6)
       end if
-c
-      return
-      end
+
+      RETURN
+      END
