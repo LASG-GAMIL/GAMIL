@@ -77,8 +77,7 @@ subroutine initindx
 ! Register MG stratiform constituents ! sxj-2008-11-10
 ! cloud water ice  /two-moment
      call stratiform_register
-	 call vd_register
-	 if (masterproc) write(6,*) "stratiform_register***sxj********"
+     call vd_register
   elseif (RK_or_MG=='RK') then
 ! Register cloud water and determine index (either advected or non-adv).
      if (cldw_adv) then  !(cldw_adv false)  pcnst pnats
@@ -90,8 +89,8 @@ subroutine initindx
      endif
 ! add 3 nonadvec constituent   make pnad(last non-advect tracer number equal pcnst<1>+pnats<4>)
      call cnst_add('TEST1', nonadvec, mwdry, cpair, 0._r8, mm)
-	 call cnst_add('TEST2', nonadvec, mwdry, cpair, 0._r8, mm)
-	 call cnst_add('TEST3', nonadvec, mwdry, cpair, 0._r8, mm)
+     call cnst_add('TEST2', nonadvec, mwdry, cpair, 0._r8, mm)
+     call cnst_add('TEST3', nonadvec, mwdry, cpair, 0._r8, mm)
   endif
 !
 ! Register advected test tracers and determine starting index

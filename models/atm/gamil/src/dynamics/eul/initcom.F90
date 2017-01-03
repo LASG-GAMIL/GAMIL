@@ -49,13 +49,8 @@ subroutine initcom
   CALL SETMSA0(TBB, HBB, GHS , P00, T00, PSB, TSB)
 
   dtime = get_step_size()
-!
-! Set vertical layers
-!
-  CALL VPAR(PMTOP, P00, SIG, SIGL, DSIG)
 
-  PMTOP = PMTOP * 100.0D0
-  P00   = P00   * 100.0D0
+  P00   = P00  * 100.0D0
 
 !
 ! calculate hypi & hypm for 'inti'

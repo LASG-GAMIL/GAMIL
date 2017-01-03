@@ -35,14 +35,6 @@ subroutine inti
    use aerosol_mass_interface ,only:aerosol_mass_init !! sxj-2009-03-09
    use prescribed_aerosols,    only:aerosol_initialize !! sxj-2009-03-09
 
-    ! *** added by DONG Li *** !
-    use pmgrid,       only: masterproc
-#if (defined TRIAL_RUN_FORCING)
-    use SolarForcing, only: SolarForcing_Init
-    use GHGForcing,   only: GHGForcing_Init
-#endif
-    ! ************************ !
-
    implicit none
 
 #include <comctl.h>
@@ -100,11 +92,8 @@ subroutine inti
     !
     if (RK_or_MG=='MG') then
         call aerosol_initialize(phys_state(begchunk:endchunk))  !! sxj 2009-03-09
-        if (masterproc) write(*, "('Notice: aerosol_initialize: Finished.')")
         call stratiform_init                                    !! sxj 2008-11-10
-        if (masterproc) write(*, "('Notice: stratiform_init: Finshed.')")
         call aerosol_mass_init()                                !! sxj 2009-03-09
-        if (masterproc) write(*, "('Notice: aerosol_mass_init: Finshed.')")
     else if (RK_or_MG=='RK') then
         call inimc(tmelt, rhodair/1000.0, gravit, rh2o)   
     end if
@@ -112,11 +101,6 @@ subroutine inti
     ! initialization for ISCCP Cloud Simulator
     !
     if (doisccp) call cloudsimulator_init             !!(wh 2005.01.28,following cam3.0)
-
-#if (defined TRIAL_RUN_FORCING)
-    call SolarForcing_Init
-    call GHGForcing_Init
-#endif
 
    return
 end subroutine inti

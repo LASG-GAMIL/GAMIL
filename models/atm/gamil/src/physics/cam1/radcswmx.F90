@@ -641,8 +641,8 @@ subroutine radcswmx(lchnk   ,ncol    ,                            &
    real(r8) fluxdn(0:pverp)  ! Down flux at model interface
    real(r8) wexptdn          ! Direct solar beam trans. to surface
 
-    real(r8) :: swuptoa(pcols) = 0.0_r8  ! short wave up at top of atmosphere
-    real(r8) :: swdntoa(pcols) = 0.0_r8  ! short wave down at top of atmosphere
+    real(r8) swuptoa(pcols)  ! short wave up at top of atmosphere
+    real(r8) swdntoa(pcols)  ! short wave down at top of atmosphere
 
 !-----------------------------------------------------------------------
 ! START OF CALCULATION
@@ -675,6 +675,9 @@ subroutine radcswmx(lchnk   ,ncol    ,                            &
       soll(i)     = 0.0_r8
       solsd(i)    = 0.0_r8
       solld(i)    = 0.0_r8
+
+      swuptoa(i)  = 0.0_r8
+      swdntoa(i)  = 0.0_r8
 
       do k=1, pver
          qrs(i,k) = 0.0_r8

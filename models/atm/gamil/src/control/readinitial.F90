@@ -42,8 +42,8 @@ subroutine readinitial(ncid)
 
   integer lonid, latid, levid
   integer hyaiid, hybiid, hyamid, hybmid
-  integer ilev, ilevid
-  integer rlonid, nlonid
+  integer ilev, ilevid, pmtopid
+  integer nlonid
   integer phisid
   real(r8) phis_tmp(plond,plat)
 
@@ -52,7 +52,7 @@ subroutine readinitial(ncid)
   integer cnt2d(3)            ! lon, lat, time counts for netcdf 2-d        !!(wh10.20)
   data cnt2d/plon,1,1/        ! 2-d arrs: Always grab only a "plon" slice   !!(wh10.20)
 
-  integer i, j
+  integer i, j, k
 
   integer mlon             ! longitude dimension length from dataset
   integer mlev             ! level dimension length from dataset
@@ -105,6 +105,16 @@ subroutine readinitial(ncid)
     call wrap_get_var_realx(ncid, hyaiid, hyai)
     call wrap_get_var_realx(ncid, hybiid, hybi)
 
+    ! Read sigma levels.
+    call wrap_inq_varid(ncid, "pmtop", pmtopid)
+    call wrap_get_var_realx(ncid, pmtopid, pmtop)
+    call wrap_get_var_realx(ncid, levid, sigl)
+    call wrap_get_var_realx(ncid, ilevid, sig)
+
+    do k = 1, plev
+      dsig(k) = sig(k+1) - sig(k)      
+    end do
+
     do j = 1, plat
       strt2d(2) = j
       call wrap_get_vara_realx(ncid, phisid, strt2d, cnt2d, phis_tmp(1,j))
@@ -115,11 +125,15 @@ subroutine readinitial(ncid)
   call copy_phis_ghs(phis_tmp)
 
 #if ( defined SPMD )
-  call mpibcast(nlon,  plat, mpiint, 0, mpicom)
-  call mpibcast(hyam  ,plev ,mpir8,  0, mpicom)
-  call mpibcast(hybm  ,plev ,mpir8,  0, mpicom)
-  call mpibcast(hyai  ,plevp,mpir8,  0, mpicom)
-  call mpibcast(hybi  ,plevp,mpir8,  0, mpicom)
+  call mpibcast(nlon,  plat,  mpiint, 0, mpicom)
+  call mpibcast(hyam,  plev,  mpir8,  0, mpicom)
+  call mpibcast(hybm,  plev,  mpir8,  0, mpicom)
+  call mpibcast(hyai,  plevp, mpir8,  0, mpicom)
+  call mpibcast(hybi,  plevp, mpir8,  0, mpicom)
+  call mpibcast(sigl,  plev,  mpir8,  0, mpicom)
+  call mpibcast(sig,   plevp, mpir8,  0, mpicom)
+  call mpibcast(dsig,  plev,  mpir8,  0, mpicom)
+  call mpibcast(pmtop, 1,     mpir8,  0, mpicom)
 #endif
 
 end subroutine readinitial
