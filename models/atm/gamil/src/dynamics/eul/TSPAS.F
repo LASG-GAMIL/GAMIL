@@ -28,7 +28,7 @@
       DATA ZERO, HALF, FOURTH, EPSM /0.0D0,0.5D0,0.25D0,1.0D-80/
 
       INTEGER I, J, K
-      INTEGER comm_request1, comm_request2, comm_request3
+      INTEGER comm_request1, comm_request2
 
       call gamil_arrays_comm(COMM_TO_RIGHT, 1, Q(:,beglatexdyn,1))
       call gamil_arrays_comm(COMM_TO_TOP,   1, Q(:,beglatexdyn,1))
@@ -57,13 +57,13 @@
         DO J = jbeg1, jend1
           DO I = ibeg1, iend1
             FX(I,J,K) = HALF*(CX(I,J,K)   *(Q(I,J,K)+Q(I-1,J,K))
-     $                       -CX(I,J,K)**2*(Q(I,J,K)-Q(I-1,J,K)))
+     $                       -CX(I,J,K)**2*(Q(I,J,K)-Q(I-1,J,K))/SINU(J))
           END DO
         END DO
         DO J = jbeg0, jend1
           DO I = ibeg1, iend1
-            FY(I,J,K) = HALF*(CY(I,J,K)                   *(Q(I,J+1,K)+Q(I,J,K))
-     $                       -CY(I,J,K)**2*WTGV(J)/SINV(J)*(Q(I,J+1,K)-Q(I,J,K)))
+            FY(I,J,K) = HALF*(CY(I,J,K)   *(Q(I,J+1,K)+Q(I,J,K))
+     $                       -CY(I,J,K)**2*(Q(I,J+1,K)-Q(I,J,K))/SINV(J)*WTGV(J))
           END DO
         END DO
       END DO
@@ -78,8 +78,8 @@
           DO I = ibeg1, iend1
             TEMP1 = ABS(CX(I  ,J,K))*(1-ABS(CX(I  ,J,K)))
             TEMP2 = ABS(CX(I+1,J,K))*(1-ABS(CX(I+1,J,K)))
-            TEMP3 = ABS(CY(I,J-1,K)/SINV(J-1)*WTGV(J-1))*(1-ABS(CY(I,J-1,K))/SINV(J-1)*WTGV(J-1))
-            TEMP4 = ABS(CY(I,J  ,K)/SINV(J  )*WTGV(J  ))*(1-ABS(CY(I,j  ,K))/SINV(J  )*WTGV(J  ))
+            TEMP3 = ABS(CY(I,J-1,K)/SINV(J-1)*WTGV(J-1))*(1-ABS(CY(I,J-1,K)/SINV(J-1)*WTGV(J-1)))
+            TEMP4 = ABS(CY(I,J  ,K)/SINV(J  )*WTGV(J  ))*(1-ABS(CY(I,j  ,K)/SINV(J  )*WTGV(J  )))
             GAMA = MAX(TEMP1, TEMP2, TEMP3, TEMP4)
             BETA(I,J,K) = 2.0D0/(2.0D0-2.0D0*GAMA)
           END DO
