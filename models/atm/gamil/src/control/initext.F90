@@ -94,16 +94,16 @@ subroutine initext
             call getfil(bndtvo, locfn)
             call wrap_open(locfn, 0, ncid_oz)
             write(6, "('Notice: initext: ')", advance="no")
-            write(6, "('wrap_open returns ncid ', I5)", advance="no") ncid_oz
+            write(6, "('wrap_open returns ncid ', I8)", advance="no") ncid_oz
             write(6, "(' for file ', A)") trim(locfn)
         end if
 #ifndef COUP_CSM
-        if (.not. aqua_planet) then
+        if (.not. aqua_planet .and. .not. adiabatic) then
             if (masterproc) then
                 call getfil(bndtvs, locfn)
                 call wrap_open(locfn, 0, ncid_sst)
                 write(6, "('Notice: initext: ')", advance="no")
-                write(6, "('wrap_open returns ncid ', I5)", advance="no") ncid_sst
+                write(6, "('wrap_open returns ncid ', I8)", advance="no") ncid_sst
                 write(6, "(' for file ', A)") trim(locfn)
             end if
         end if

@@ -90,7 +90,7 @@ subroutine inti
     !
     ! initialization routine for prognostic cloud water
     !
-    if (RK_or_MG=='MG') then
+    if (RK_or_MG=='MG' .and. .not. adiabatic) then
         call aerosol_initialize(phys_state(begchunk:endchunk))  !! sxj 2009-03-09
         call stratiform_init                                    !! sxj 2008-11-10
         call aerosol_mass_init()                                !! sxj 2009-03-09

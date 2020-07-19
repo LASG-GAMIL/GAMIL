@@ -552,7 +552,7 @@ subroutine parse_namelist
 
         if (ierr /= 0) then
             write(6,*)'PARSE_NAMELIST: Namelist read returns ',ierr
-            !!         call endrun                        !!(wh 2003.11.18)
+            call endrun
         end if
         !
         ! Check CASE namelist variable

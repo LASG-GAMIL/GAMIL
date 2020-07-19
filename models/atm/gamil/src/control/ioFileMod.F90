@@ -92,22 +92,8 @@ module ioFileMod
       return
    endif
  
-! finally check on mass store
+   call endrun('Failed to open ' // trim(locfn) // ' ' // trim(fulpath))
  
-   text='msread '//trim(locfn)//' '//trim(fulpath)
-   call shell_cmd(text, ierr)
-   if (ierr==0) then
-      write(6,*)'(GETFIL): File ',trim(locfn),' read from MSS'
-   else  ! all tries to get file have been unsuccessful
-      write(6,*)'(GETFIL): failed cmd=',trim(text)
-      if (present(iflag) .and. iflag==0) then
-         call endrun
-      else
-         RETURN
-      endif
-   end if
- 
-   return
    end subroutine getfil
  
 !=======================================================================

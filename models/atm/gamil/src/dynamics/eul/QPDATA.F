@@ -62,8 +62,10 @@
       CALL AVNEGQ(QT, DSIG)
 
 !     For debug.
+#ifdef DEBUG
       CALL QEM(QT, DX, DY, DSIG, SINU, SINV, WTGU, WTGV, QM)
       if (is_rootproc) write(6, *) "QM =", QM
+#endif
 
       RETURN
       END
