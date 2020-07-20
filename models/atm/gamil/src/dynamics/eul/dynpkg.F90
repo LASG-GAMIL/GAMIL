@@ -3,126 +3,90 @@
 
 subroutine dynpkg(dtdy, nseq)
 
-!----------------------------------------------------------------------- 
-! 
-! Purpose: 
-! Driving routines for dynamics and transport.
-! 
-!-----------------------------------------------------------------------
+  use shr_kind_mod, only: r8 => shr_kind_r8
+  use pmgrid
+  use prognostics
+  use commap
+  use stdatm  
+  use comfm1
+  use comhd
+  use fspan
 
-   use shr_kind_mod, only: r8 => shr_kind_r8
-   use pmgrid
-   use prognostics
-   use commap
-   use stdatm  
-   use comfm1
-   use comhd
-   use fspan      !!(wh 2003.11.04)
+  implicit none
 
-
-!-----------------------------------------------------------------------
-   implicit none
-!-----------------------------------------------------------------------
 #include <comhyb.h>
-!----------------------------------------------------------------------
 #include <comctl.h>
 
+  real(r8), intent(in)  :: dtdy ! timestep size ( dyn core )
+  integer , intent(in)  :: nseq
 
-!------------------------------Arguments--------------------------------
-!
-! Input arguments
-!
+  real(r8), allocatable :: tkk(:,:,:)
+  real(r8), allocatable :: ukk(:,:,:)
+  real(r8), allocatable :: vkk(:,:,:)
 
-   real(r8),intent(in   )  :: dtdy               ! timestep size ( dyn core )
-   integer, intent(in   )  :: nseq
+  integer i, j, k, begj
 
-!---------------------------Local workspace-----------------------------
-   real(r8),allocatable :: tkk (:,:,:)      !  for fm2003
-   real(r8),allocatable :: ukk (:,:,:)      !  for fm2003
-   real(r8),allocatable :: vkk (:,:,:)      !  for fm2003
+  allocate(tkk(beglonex:endlonex,beglatexdyn:endlatexdyn,plev))
+  allocate(ukk(beglonex:endlonex,beglatexdyn:endlatexdyn,plev))
+  allocate(vkk(beglonex:endlonex,beglatexdyn:endlatexdyn,plev))
 
-   integer  :: i,j,k
-   integer  :: begj
+  begj = beglatexdyn
 
+  call t_startf('dyfram')
 
-!----------------------------------------------------------
-!....  PERFORM THE DYNAMIC INTEGRATON CYCLE
-!----------------------------------------------------------
+  call dyfram2(nseq, dtdy, itime                                  &
+              ,u, v, t, q, ws, pes, wpa, ghs, ghi, ply, tb        &
+              ,su, sv, st, sq                                     &
+              ,pmtop, sig, sigl, dsig                             &
+              ,tbb, hbb, cbb, dcbb, psb, tsb                      &
+              ,dy, wtgu(begj),wtgv(begj)                          &
+              ,dx, sinu, sinv, oux, ouy, ovx, ovy, ff, cur        &
+              ,mm1, mp1, mm2, mp2, mm3, mp3, mdj)
 
+  call t_stopf('dyfram')
 
-      allocate (tkk (beglonex:endlonex, beglatexdyn:endlatexdyn, plev))
-      allocate (ukk (beglonex:endlonex, beglatexdyn:endlatexdyn, plev))
-      allocate (vkk (beglonex:endlonex, beglatexdyn:endlatexdyn, plev))
-!
-      begj = beglatexdyn
+  call t_startf('hdifus')
 
-     call t_startf('dyfram')
+  if (.not. aqua_planet)  then
+!$omp parallel do collapse(3)
+    do k = 1, plev
+      do j = jbeg0, jend0
+        do i = beglonex, endlonex
+          ukk(i,j,k) = u(i,j,k)
+          vkk(i,j,k) = v(i,j,k)
+          tkk(i,j,k) = t(i,j,k)
+          qk (i,j,k) = q(i,j,k)
+        end do
+      end do
+    end do
 
-        call dyfram2( nseq,dtdy,itime                                  &
-                     ,u,v,t,q,ws,pes,wpa,ghs,ghi,ply,tb                &
-                     ,su,sv,st,sq                                      &
-                     ,pmtop,sig,sigl,dsig                              &
-                     ,tbb,hbb,cbb,dcbb,psb,tsb                         &
-                     ,dy,wtgu(begj),wtgv(begj)                         &
-                     ,dx,sinu,sinv,oux,ouy,ovx,ovy,ff,cur              &
-                     ,mm1,mp1,mm2,mp2,mm3,mp3,mdj )
-
-
-      call t_stopf('dyfram')
-!
-!----------------------------------------------------------
-!....  DO FIRST HALF-STEP HORIZONTAL DIFFUSION
-!----------------------------------------------------------
-
-   call t_startf('hdifus')
-
-   if (.not.aqua_planet)  then
-   !if ((.not.aqua_planet).and.(.not.adiabatic))  then
-
-!$OMP PARALLEL DO PRIVATE (I, J, K)
-      DO K=1,plev
-        DO J=jbeg0,jend0
-          DO I=beglonex,endlonex
-             UKK(I,J,K)=U(I,J,K)
-             VKK(I,J,K)=V(I,J,K)
-             tkk(I,J,K)=T(I,J,K)
-             QK(I,J,K)=Q(I,J,K)
-          END DO
-        END DO
-      END DO
-
-      CALL HDIFUS(U,V,T,Q,FRDT,FRDS,FRDU,FRDV,FRDP,TB,PLY,DXVPN,DXVPS)
+    call hdifus(u, v, t, q, frdt, frds, frdu, frdv, frdp, tb, ply, dxvpn, dxvps)
 
 
-!$OMP PARALLEL DO PRIVATE (I, J, K)
-      DO K=1,plev
-        DO J=jbeg0,jend0
-          DO I=beglonex,endlonex
-             SU(I,J,K)=(U(I,J,K)-UKK(I,J,K))/DTHDFS
-             SV(I,J,K)=(V(I,J,K)-VKK(I,J,K))/DTHDFS
-             ST(I,J,K)=(T(I,J,K)-tkk(I,J,K))/DTHDFS
-             U(I,J,K)=UKK(I,J,K)
-             V(I,J,K)=VKK(I,J,K)
-             T(I,J,K)=tkk(I,J,K)
-             Q(I,J,K)=QK(I,J,K)
-          END DO
-        END DO
-      END DO
+!$omp parallel do collapse(3)
+    do k = 1, plev
+      do j = jbeg0, jend0
+        do i = beglonex, endlonex
+          su(i,j,k) = (u(i,j,k) - ukk(i,j,k)) / dthdfs
+          sv(i,j,k) = (v(i,j,k) - vkk(i,j,k)) / dthdfs
+          st(i,j,k) = (t(i,j,k) - tkk(i,j,k)) / dthdfs
+          u (i,j,k) = ukk(i,j,k)
+          v (i,j,k) = vkk(i,j,k)
+          t (i,j,k) = tkk(i,j,k)
+          q (i,j,k) = qk (i,j,k)
+        end do
+      end do
+    end do
+  else
+    su = 0.0
+    sv = 0.0
+    st = 0.0
+  end if
 
-   else
-      su(:,:,:) = 0.0
-      sv(:,:,:) = 0.0
-      st(:,:,:) = 0.0
+  deallocate(ukk)
+  deallocate(vkk)
+  deallocate(tkk)
 
-   endif
-
-      deallocate (ukk)
-      deallocate (vkk)
-      deallocate (tkk)
-
-      call t_stopf('hdifus')
-
-   return
+  call t_stopf('hdifus')
 
 end subroutine dynpkg
-

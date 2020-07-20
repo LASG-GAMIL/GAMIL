@@ -1,5 +1,7 @@
 module mpi_gamil
 
+  implicit none
+
 #include <mpif.h>
 #include <params.h>
   
@@ -13,17 +15,17 @@ module mpi_gamil
 #define UNPACK_TOP          6
 #define UNPACK_BOT          7
 
-  integer,parameter :: COMM_TO_LEFT = 0
-  integer,parameter :: COMM_TO_RIGHT = 1
-  integer,parameter :: COMM_TO_TOP = 2
-  integer,parameter :: COMM_TO_BOT = 3
-  integer,parameter :: COMM_ROTATE_LEFT = 4
-  integer,parameter :: COMM_ROTATE_RIGHT = 5
-  integer,parameter :: PACK_FOR_PHYS = 1
-  integer,parameter :: PACK_FOR_1D = 2
-  integer,parameter :: XLON = PLON+2
-  integer,parameter :: YLAT = PLAT
-  integer,parameter :: ZALT = PLEV+1
+  integer, parameter :: COMM_TO_LEFT = 0
+  integer, parameter :: COMM_TO_RIGHT = 1
+  integer, parameter :: COMM_TO_TOP = 2
+  integer, parameter :: COMM_TO_BOT = 3
+  integer, parameter :: COMM_ROTATE_LEFT = 4
+  integer, parameter :: COMM_ROTATE_RIGHT = 5
+  integer, parameter :: PACK_FOR_PHYS = 1
+  integer, parameter :: PACK_FOR_1D = 2
+  integer, parameter :: XLON = PLON + 2
+  integer, parameter :: YLAT = PLAT
+  integer, parameter :: ZALT = PLEV + 1
 
   integer, public :: ierr                      ! error code
   integer, public :: gamil_comm                ! the comm group of gamil
@@ -69,26 +71,26 @@ module mpi_gamil
   real*16, allocatable :: reduce_buf(:)
 
   type, private :: comm_array_type
-      integer num_dims
-      integer ibeg, iend
-      integer jbeg, jend
-      integer kbeg, kend
-      integer lbeg, lend
-      real, pointer :: array(:)
-      logical is_phys_array
+    integer num_dims
+    integer ibeg, iend
+    integer jbeg, jend
+    integer kbeg, kend
+    integer lbeg, lend
+    real, pointer :: array(:)
+    logical is_phys_array
   end type comm_array_type
 
   integer, private, parameter :: requests_size = 32
   type, private :: mpi_icomm_request
-      logical used_mark
-      integer num_requests
-      integer nlevels
-      integer requests(16)
-      integer num_arrays
-      integer comm_array_ids(64)
-      real, allocatable :: send_buffer(:)
-      real, allocatable :: recv_buffer(:)
-      integer comm_direction                   ! 0->left, 1->right, 2->top, 3->bottom
+    logical used_mark
+    integer num_requests
+    integer nlevels
+    integer requests(16)
+    integer num_arrays
+    integer comm_array_ids(64)
+    real, allocatable :: send_buffer(:)
+    real, allocatable :: recv_buffer(:)
+    integer comm_direction                   ! 0->left, 1->right, 2->top, 3->bottom
   end type mpi_icomm_request
 
   type(mpi_icomm_request), private :: icomm_requests(requests_size)
@@ -97,28 +99,18 @@ module mpi_gamil
   integer, private :: num_registered_comm_arrays
   type(comm_array_type), private :: registered_comm_arrays(max_num_comm_arrays)
 
-  REAL*16, allocatable, private :: reduce_buf_real16(:)
+  real(16), allocatable, private :: reduce_buf_real16(:)
   integer,              private :: reduce_buf_real16_size
 
   save
 
-   INTERFACE
-
-   SUBROUTINE set_aff(k)
-   INTEGER k
-   END SUBROUTINE
-
-   subroutine is_the_same_array(data1,data2,match_result)
-     real data1, data2
-     integer match_result
-   end subroutine is_the_same_array
-   END INTERFACE
-  
 contains
 
-subroutine gamil_comm_init
+  subroutine gamil_comm_init
+
     use omp_lib
     use mpishorthand, only: mpicom
+
     implicit none
     integer i,j
 
@@ -400,40 +392,38 @@ subroutine gamil_2D_decomp
 
 end subroutine gamil_2D_decomp
 
+  subroutine allreduce_real16(input_data, output_data, num_data, comm, num_proc)
 
- SUBROUTINE allreduce_real16(input_data, output_data, num_data, comm, num_proc)
-   implicit none
-   real*16           :: input_data(:), output_data(:)
-   integer           :: num_data, comm
-   integer           :: ierr
-   integer,optional  :: num_proc
-   integer           :: local_num_proc, i, k
+    real(16), intent(in) :: input_data(:)
+    real(16), intent(out) :: output_data(:)
+    integer, intent(in) :: num_data, comm
+    integer, intent(in), optional :: num_proc
 
+    integer local_num_proc, i, k, ierr
 
-#if ( defined  NO_MPI_REAL16 )
-   if (present(num_proc)) then
-       local_num_proc = num_proc
-   else
-       call MPI_COMM_SIZE(comm, local_num_proc, ierr)
-   end if
-   if (reduce_buf_real16_size < num_data*local_num_proc) then
+#if ( defined MPI_REAL16 )
+    call mpi_allreduce(input_data,output_data,num_data,MPI_REAL16,MPI_SUM,comm,ierr)
+#else
+    if (present(num_proc)) then
+      local_num_proc = num_proc
+    else
+      call MPI_COMM_SIZE(comm, local_num_proc, ierr)
+    end if
+    if (reduce_buf_real16_size < num_data*local_num_proc) then
       reduce_buf_real16_size = num_data*local_num_proc*2
       deallocate(reduce_buf_real16)
       allocate(reduce_buf_real16(reduce_buf_real16_size))
-   end if
-   call mpi_allgather(input_data,num_data*2,MPI_REAL8,reduce_buf_real16,num_data*2,MPI_REAL8,comm,ierr)
-   do k=1,num_data
-       output_data(k) = 0.0
-       do i=1,local_num_proc
-          output_data(k) = output_data(k) + reduce_buf_real16((i-1)*num_data+k)
-       end do
-    enddo
-#else
-   call mpi_allreduce(input_data,output_data,num_data,MPI_REAL16,MPI_SUM,comm,ierr)
+    end if
+    call mpi_allgather(input_data,num_data*2,MPI_REAL8,reduce_buf_real16,num_data*2,MPI_REAL8,comm,ierr)
+    do k = 1, num_data
+      output_data(k) = 0.0
+      do i = 1, local_num_proc
+        output_data(k) = output_data(k) + reduce_buf_real16((i-1)*num_data+k)
+      end do
+    end do
 #endif
- END SUBROUTINE allreduce_real16
- 
 
+  end subroutine allreduce_real16
 
 integer function get_free_icomm_request()
     implicit none
@@ -482,73 +472,70 @@ subroutine register_comm_array(ibeg, iend, jbeg, jend, kbeg, kend, lbeg, lend, a
 end subroutine register_comm_array
 
 
-subroutine remove_comm_array(array)
-    implicit none
-    real,intent(in):: array(:)
-    integer match_result
+  subroutine remove_comm_array(array)
 
-    call is_the_same_array(array(1),registered_comm_arrays(num_registered_comm_arrays)%array(1),match_result)
-    if (num_registered_comm_arrays .eq. 0 .or. match_result .eq. 0) then
-      write(6,*) 'can not remove comm array'
-      call endrun
+    real, intent(in), target :: array(:)
+
+    if (num_registered_comm_arrays == 0 .or. .not. associated(registered_comm_arrays(num_registered_comm_arrays)%array, array)) then
+      call endrun('Cannot remove comm array!')
     end if
     num_registered_comm_arrays = num_registered_comm_arrays - 1
-end subroutine remove_comm_array
 
+  end subroutine remove_comm_array
 
-subroutine add_comm_array(rid, array)
-    implicit none
-    integer,intent(in) :: rid
-    real,target,intent(in):: array(:)
-    integer i, comm_array_id, match_result
+  subroutine add_comm_array(rid, array)
 
-    call t_startf("dyn search array")
+    integer, intent(in) :: rid
+    real, intent(in), target:: array(:)
+    integer i, comm_array_id
+
+    call t_startf('dyn search array')
+
     comm_array_id = 0
     do i = num_registered_comm_arrays, 1, -1
-      call is_the_same_array(array(1),registered_comm_arrays(i)%array(1),match_result)
-      if (match_result .eq. 1) then
+      if (associated(registered_comm_arrays(i)%array, array)) then
         comm_array_id = i
-        goto 20
+        exit
       end if
     end do
 
-20 if (comm_array_id .eq. 0) then
-     if (is_rootproc) then
-       write(6,*) 'encounter unregistered comm array'
-       call endrun
-     end if
+    if (comm_array_id == 0) then
+      if (is_rootproc) then
+        call endrun('Encounter unregistered comm array!')
+      end if
     end if
-    call t_stopf("dyn search array")
+
+    call t_stopf('dyn search array')
 
     icomm_requests(rid)%num_arrays = icomm_requests(rid)%num_arrays + 1
     icomm_requests(rid)%comm_array_ids(icomm_requests(rid)%num_arrays) = comm_array_id
-end subroutine add_comm_array
 
+  end subroutine add_comm_array
 
-subroutine wait_icomm_request(id)
-    implicit none
-    integer :: id
-    integer :: i
+  subroutine wait_icomm_request(id)
+
+    integer, intent(in) :: id
+    integer i
     
-    if (.not. (icomm_requests(id)%used_mark)) call endrun
+    if (.not. icomm_requests(id)%used_mark) call endrun
 
-    call t_startf("dyn sendrecv")
-    do i=1, icomm_requests(id)%num_requests
-       call MPI_WAIT(icomm_requests(id)%requests(i),status,ierr)                         
+    call t_startf('dyn sendrecv')
+    do i = 1, icomm_requests(id)%num_requests
+      call MPI_WAIT(icomm_requests(id)%requests(i), status, ierr)
     end do
-    call t_stopf("dyn sendrecv")
+    call t_stopf('dyn sendrecv')
 
-    call t_startf("dyn pack/unpack")
+    call t_startf('dyn pack/unpack')
     call unpack_request_comm_arrays(id)
     call t_stopf("dyn pack/unpack")
 
     icomm_requests(id)%used_mark = .false.
     icomm_requests(id)%num_requests = 0
-end subroutine wait_icomm_request
 
+  end subroutine wait_icomm_request
 
-subroutine gamil_scatter_2D_array_phys(array_g, ibeg, iend, jbeg,jend, array)
-    implicit none
+  subroutine gamil_scatter_2D_array_phys(array_g, ibeg, iend, jbeg,jend, array)
+
     real :: array(ibeg:iend,jbeg:jend)
     real :: array_g(XLON,YLAT)
     integer :: ibeg,iend,jbeg,jend
@@ -1604,9 +1591,18 @@ subroutine gamil_min_lat_row_data(array1,num_data1,array2,num_data2)
 end subroutine gamil_min_lat_row_data
 
 
-subroutine endrun()
-   write(6,*) 'gamil call endrun'
-   call mpi_abort (gamil_comm, 1)
-end subroutine endrun
+  subroutine endrun(message)
+
+    character(*), intent(in), optional :: message
+
+    if (present(message)) then
+      write(6, *) '[Error]: MPI_GAMIL: ' // trim(message)
+    else
+      write(6, *) '[Error]: MPI_GAMIL: Simulation is terminated!'
+    end if
+
+    call mpi_abort(gamil_comm, 1)
+
+  end subroutine endrun
 
 end module mpi_gamil
