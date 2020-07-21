@@ -59,8 +59,7 @@ subroutine initcom
 !
 ! Initialize commap.
 !
-  call initialize_fspan
-  CALL SPAN(MM1, MM2, MM3, MP1, MP2, MP3, MDJ)
+  call initialize_fspan()
 
   CALL LATMESH(DY, YTHU(1), YTHV(1), WTGU(1), WTGV(1))
 
